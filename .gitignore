@@ -1,0 +1,13 @@
+**/*.iml
+**/.idea/
+**/target/
+**/.settings/
+**/.project
+**/.classpath
+**/.checkstyle
+**/.gradle
+**/build
+.bloop/
+.metals/
+.vscode/
+**/dependency-reduced-pom.xml
