@@ -1,0 +1,424 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.skraba</groupId>
+  <artifactId>avrofaker</artifactId>
+  <version>0.0.1-SNAPSHOT</version>
+  <packaging>jar</packaging>
+
+  <name>${project.groupId}:${project.artifactId}</name>
+  <description>AvroFaker - Generate fake Avro data</description>
+  <url>http://github.com/RyanSkraba/avrofaker</url>
+  <licenses>
+    <license>
+      <name>The Apache License, Version 2.0</name>
+      <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+    </license>
+  </licenses>
+  <developers>
+    <developer>
+      <name>Ryan Skraba</name>
+      <email>ryan@skraba.com</email>
+      <organization>ryan@skraba.com</organization>
+      <organizationUrl>https://skraba.com</organizationUrl>
+    </developer>
+  </developers>
+  <scm>
+    <connection>scm:git:git://github.com/RyanSkraba/avrofaker.git</connection>
+    <developerConnection>scm:git:ssh://github.com:RyanSkraba/avrofaker.git</developerConnection>
+    <url>http://github.com/RyanSkraba/avrofaker/</url>
+  </scm>
+
+  <properties>
+    <!-- From this file to the root directory of the repo. -->
+    <project.relBaseDir>.</project.relBaseDir>
+
+    <!-- specifies that the system uses Java 17 by default -->
+    <maven.compiler.source>17</maven.compiler.source>
+    <maven.compiler.target>17</maven.compiler.target>
+
+    <!-- Shared properties by all sub-projects -->
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+    <!-- Launcher class -->
+    <exec.mainClass/>
+
+    <!-- Dependencies -->
+    <avro.version>1.12.1</avro.version>
+    <scala.binary.version>2.13</scala.binary.version>
+    <scala.version>2.13.18</scala.version>
+    <scalafmt.version>3.8.0</scalafmt.version>
+    <scalatest.version>3.2.19</scalatest.version>
+
+    <!-- Plugins -->
+    <plugin.clean.maven.version>3.5.0</plugin.clean.maven.version>
+    <plugin.compiler.maven.version>3.14.1</plugin.compiler.maven.version>
+    <plugin.deploy.maven.version>3.1.4</plugin.deploy.maven.version>
+    <plugin.enforcer.maven.version>3.6.2</plugin.enforcer.maven.version>
+    <plugin.enforcer.required.maven.version>3.8.1</plugin.enforcer.required.maven.version>
+    <plugin.failsafe.maven.version>3.5.4</plugin.failsafe.maven.version>
+    <plugin.gpg.maven.version>3.2.8</plugin.gpg.maven.version>
+    <plugin.install.maven.version>3.1.4</plugin.install.maven.version>
+    <plugin.jar.maven.version>3.5.0</plugin.jar.maven.version>
+    <plugin.javadoc.maven.version>3.12.0</plugin.javadoc.maven.version>
+    <plugin.maven.docker.version>0.45.1</plugin.maven.docker.version>
+    <plugin.maven.publishing.central.version>0.9.0</plugin.maven.publishing.central.version>
+    <plugin.maven.scala.version>4.9.7</plugin.maven.scala.version>
+    <plugin.maven.scalatest.exclude>org.scalatest.tags.Slow</plugin.maven.scalatest.exclude>
+    <plugin.maven.scalatest.version>2.2.0</plugin.maven.scalatest.version>
+    <plugin.maven.spotless.version>3.1.0</plugin.maven.spotless.version>
+    <plugin.report.surefire.maven.version>3.5.0</plugin.report.surefire.maven.version>
+    <plugin.resources.maven.version>3.3.1</plugin.resources.maven.version>
+    <plugin.shade.maven.version>3.6.1</plugin.shade.maven.version>
+    <plugin.site.maven.version>4.0.0-M16</plugin.site.maven.version>
+    <plugin.source.maven.version>3.3.1</plugin.source.maven.version>
+    <plugin.surefire.maven.version>3.5.4</plugin.surefire.maven.version>
+    <plugin.war.maven.version>3.4.0</plugin.war.maven.version>
+  </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>org.apache.avro</groupId>
+        <artifactId>avro</artifactId>
+        <version>${avro.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.scala-lang</groupId>
+        <artifactId>scala-library</artifactId>
+        <version>${scala.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.scala-lang</groupId>
+        <artifactId>scala-reflect</artifactId>
+        <version>${scala.version}</version>
+      </dependency>
+
+      <dependency>
+        <groupId>org.scalatest</groupId>
+        <artifactId>scalatest_${scala.binary.version}</artifactId>
+        <version>${scalatest.version}</version>
+        <scope>test</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.apache.avro</groupId>
+      <artifactId>avro</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.scala-lang</groupId>
+      <artifactId>scala-library</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.scala-lang</groupId>
+      <artifactId>scala-reflect</artifactId>
+    </dependency>
+
+    <!-- Tests -->
+    <dependency>
+      <groupId>org.scalatest</groupId>
+      <artifactId>scalatest_${scala.binary.version}</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <pluginManagement>
+      <plugins>
+
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-clean-plugin</artifactId>
+          <version>${plugin.clean.maven.version}</version>
+        </plugin>
+
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-compiler-plugin</artifactId>
+          <version>${plugin.compiler.maven.version}</version>
+        </plugin>
+
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-deploy-plugin</artifactId>
+          <version>${plugin.deploy.maven.version}</version>
+        </plugin>
+
+        <!-- Minimum version of maven to build this project -->
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-enforcer-plugin</artifactId>
+          <version>${plugin.enforcer.maven.version}</version>
+          <executions>
+            <execution>
+              <id>enforce-maven</id>
+              <goals>
+                <goal>enforce</goal>
+              </goals>
+              <configuration>
+                <rules>
+                  <requireMavenVersion>
+                    <version>${plugin.enforcer.required.maven.version}</version>
+                  </requireMavenVersion>
+                  <requirePluginVersions>
+                    <banLatest>true</banLatest>
+                    <banRelease>true</banRelease>
+                  </requirePluginVersions>
+                </rules>
+              </configuration>
+            </execution>
+          </executions>
+        </plugin>
+
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-install-plugin</artifactId>
+          <version>${plugin.install.maven.version}</version>
+        </plugin>
+
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-javadoc-plugin</artifactId>
+          <version>${plugin.javadoc.maven.version}</version>
+        </plugin>
+
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-jar-plugin</artifactId>
+          <version>${plugin.jar.maven.version}</version>
+          <configuration>
+            <archive>
+              <manifest>
+                <mainClass>${exec.mainClass}</mainClass>
+              </manifest>
+            </archive>
+          </configuration>
+        </plugin>
+
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-resources-plugin</artifactId>
+          <version>${plugin.resources.maven.version}</version>
+        </plugin>
+
+        <!-- Shaded uber jar with all dependencies -->
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-shade-plugin</artifactId>
+          <version>${plugin.shade.maven.version}</version>
+          <executions>
+            <execution>
+              <goals>
+                <goal>shade</goal>
+              </goals>
+              <phase>package</phase>
+              <configuration>
+                <transformers>
+                  <!-- Merge JDBC drivers -->
+                  <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                    <resource>META-INF/services/java.sql.Driver</resource>
+                  </transformer>
+                </transformers>
+              </configuration>
+            </execution>
+          </executions>
+        </plugin>
+
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-site-plugin</artifactId>
+          <version>${plugin.site.maven.version}</version>
+        </plugin>
+
+        <!-- Launch scalatests as well as Java -->
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-surefire-plugin</artifactId>
+          <version>${plugin.surefire.maven.version}</version>
+          <configuration>
+            <testSourceDirectory>src/test/java</testSourceDirectory>
+            <testSourceDirectory>src/test/scala</testSourceDirectory>
+            <includes>
+              <include>**/*Spec.java</include>
+              <include>**/*Test.java</include>
+            </includes>
+          </configuration>
+        </plugin>
+        <plugin>
+          <artifactId>maven-failsafe-plugin</artifactId>
+          <version>${plugin.failsafe.maven.version}</version>
+        </plugin>
+
+        <!-- Build both java and scala classes, and they can rely on each other. -->
+        <plugin>
+          <groupId>net.alchim31.maven</groupId>
+          <artifactId>scala-maven-plugin</artifactId>
+          <version>${plugin.maven.scala.version}</version>
+          <configuration>
+            <args>
+              <arg>-deprecation</arg>
+              <arg>-Xfatal-warnings</arg>
+            </args>
+          </configuration>
+          <executions>
+            <execution>
+              <id>scala-compile-first</id>
+              <goals>
+                <goal>add-source</goal>
+                <goal>compile</goal>
+              </goals>
+              <phase>process-resources</phase>
+            </execution>
+            <execution>
+              <id>scala-test-compile</id>
+              <goals>
+                <goal>testCompile</goal>
+              </goals>
+              <phase>process-test-resources</phase>
+            </execution>
+            <execution>
+              <id>attach-scaladocs</id>
+              <goals>
+                <goal>doc-jar</goal>
+              </goals>
+              <phase>package</phase>
+            </execution>
+          </executions>
+        </plugin>
+
+        <!-- Format Java and Scala with mvn spotless:apply -->
+        <plugin>
+          <groupId>com.diffplug.spotless</groupId>
+          <artifactId>spotless-maven-plugin</artifactId>
+          <version>${plugin.maven.spotless.version}</version>
+          <configuration>
+            <java>
+              <removeUnusedImports/>
+              <googleJavaFormat/>
+            </java>
+            <pom>
+              <sortPom>
+                <expandEmptyElements>false</expandEmptyElements>
+              </sortPom>
+            </pom>
+            <scala>
+              <includes>
+                <include>src/main/java/**/*.scala</include>
+                <include>src/main/scala/**/*.scala</include>
+                <include>src/test/java/**/*.scala</include>
+                <include>src/test/scala/**/*.scala</include>
+              </includes>
+              <scalafmt>
+                <file>${project.basedir}/${project.relBaseDir}/.scalafmt.conf</file>
+                <version>${scalafmt.version}</version>
+              </scalafmt>
+            </scala>
+          </configuration>
+        </plugin>
+
+        <!-- Run scalatest unit tests -->
+        <plugin>
+          <groupId>org.scalatest</groupId>
+          <artifactId>scalatest-maven-plugin</artifactId>
+          <version>${plugin.maven.scalatest.version}</version>
+          <configuration>
+            <tagsToExclude>${plugin.maven.scalatest.exclude}</tagsToExclude>
+          </configuration>
+          <executions>
+            <execution>
+              <id>test</id>
+              <goals>
+                <goal>test</goal>
+              </goals>
+            </execution>
+          </executions>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-enforcer-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>net.alchim31.maven</groupId>
+        <artifactId>scala-maven-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>com.diffplug.spotless</groupId>
+        <artifactId>spotless-maven-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.scalatest</groupId>
+        <artifactId>scalatest-maven-plugin</artifactId>
+      </plugin>
+    </plugins>
+  </build>
+
+  <profiles>
+    <profile>
+      <id>release</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-source-plugin</artifactId>
+            <version>${plugin.source.maven.version}</version>
+            <executions>
+              <execution>
+                <id>attach-sources</id>
+                <goals>
+                  <goal>jar-no-fork</goal>
+                </goals>
+                <phase>package</phase>
+              </execution>
+            </executions>
+          </plugin>
+
+          <plugin>
+            <groupId>org.sonatype.central</groupId>
+            <artifactId>central-publishing-maven-plugin</artifactId>
+            <version>${plugin.maven.publishing.central.version}</version>
+            <extensions>true</extensions>
+            <configuration>
+              <publishingServerId>central</publishingServerId>
+              <checksums>all</checksums>
+            </configuration>
+          </plugin>
+
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-gpg-plugin</artifactId>
+            <version>${plugin.gpg.maven.version}</version>
+            <executions>
+              <execution>
+                <id>sign-artifacts</id>
+                <goals>
+                  <goal>sign</goal>
+                </goals>
+                <phase>verify</phase>
+                <configuration>
+                  <keyname>ryan@skraba.com</keyname>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+
+</project>
