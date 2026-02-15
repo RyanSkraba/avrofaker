@@ -24,7 +24,7 @@ object AvroFaker {
       case Schema.Type.STRING  => StringGenerator(schema, rnd)
       case Schema.Type.BYTES   => ???
       case Schema.Type.INT     => IntGenerator(schema, rnd)
-      case Schema.Type.LONG    => ???
+      case Schema.Type.LONG    => LongGenerator(schema, rnd)
       case Schema.Type.FLOAT   => ???
       case Schema.Type.DOUBLE  => ???
       case Schema.Type.BOOLEAN => ???
@@ -41,8 +41,7 @@ object AvroFaker {
   *   random number generator (for reproducibility if desired)
   */
 case class RecordGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker {
-  assert(schema.getType == Schema.Type.RECORD, s"${Schema.Type.RECORD} required, ${schema.getType} found")
-  val fieldGenerators: Map[Field, AvroFaker] =
+  private val fieldGenerators: Map[Field, AvroFaker] =
     schema.getFields.asScala.map((f: Field) => f -> AvroFaker(f.schema(), rnd)).toMap
   def generate(): GenericRecord = {
     val rb = new GenericRecordBuilder(schema)
@@ -59,7 +58,6 @@ case class RecordGenerator(schema: Schema, rnd: Random = new Random()) extends A
   *   random number generator (for reproducibility if desired)
   */
 case class StringGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker {
-  assert(schema.getType == Schema.Type.STRING, s"${Schema.Type.STRING} required, ${schema.getType} found")
   def generate(): String = rnd.alphanumeric.take(10).mkString
 }
 
@@ -71,9 +69,20 @@ case class StringGenerator(schema: Schema, rnd: Random = new Random()) extends A
   *   random number generator (for reproducibility if desired)
   */
 case class IntGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker {
-  assert(schema.getType == Schema.Type.INT, s"${Schema.Type.INT} required, ${schema.getType} found")
-  var seq: Int = -1
-  def generate(): Int = { seq += 1; seq }
+  private val internalGen = LongGenerator(schema, rnd)
+  def generate(): Int = internalGen.generate().toInt
+}
+
+/** A LONG schema generates an increasing sequence starting from zero.
+ *
+ * @param schema
+ *   a schema of type LONG
+ * @param rnd
+ *   random number generator (for reproducibility if desired)
+ */
+case class LongGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker {
+  private var seq: Long = -1
+  def generate(): Long = { seq += 1; seq }
 }
 
 /** A NULL schema generates only null.
@@ -84,6 +93,5 @@ case class IntGenerator(schema: Schema, rnd: Random = new Random()) extends Avro
   *   random number generator (for reproducibility if desired)
   */
 case class NullGenerator(schema: Schema) extends AvroFaker {
-  assert(schema.getType == Schema.Type.NULL, s"${Schema.Type.NULL} required, ${schema.getType} found")
   def generate(): Any = null
 }
