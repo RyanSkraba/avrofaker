@@ -74,12 +74,12 @@ case class IntGenerator(schema: Schema, rnd: Random = new Random()) extends Avro
 }
 
 /** A LONG schema generates an increasing sequence starting from zero.
- *
- * @param schema
- *   a schema of type LONG
- * @param rnd
- *   random number generator (for reproducibility if desired)
- */
+  *
+  * @param schema
+  *   a schema of type LONG
+  * @param rnd
+  *   random number generator (for reproducibility if desired)
+  */
 case class LongGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker {
   private var seq: Long = -1
   def generate(): Long = { seq += 1; seq }

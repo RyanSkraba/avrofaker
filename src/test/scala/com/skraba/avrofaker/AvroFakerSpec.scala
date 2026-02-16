@@ -38,6 +38,15 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     }
   }
 
+  describe("Generating Avro LONG data") {
+    it("should create a sequence by default") {
+      val gen = AvroFaker(Schema.create(Schema.Type.LONG), new Random(0L))
+      gen.generate() shouldBe 0L
+      gen.generate() shouldBe 1L
+      gen.generate() shouldBe 2L
+    }
+  }
+
   describe("Generating Avro NULL data") {
     it("should only ever generate NULL") {
       val gen = AvroFaker(Schema.create(Schema.Type.NULL), new Random(0L))
