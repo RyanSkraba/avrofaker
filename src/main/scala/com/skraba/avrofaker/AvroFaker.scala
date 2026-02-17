@@ -26,7 +26,7 @@ object AvroFaker {
       case Schema.Type.INT     => IntGenerator(schema, rnd)
       case Schema.Type.LONG    => LongGenerator(schema, rnd)
       case Schema.Type.FLOAT   => ???
-      case Schema.Type.DOUBLE  => ???
+      case Schema.Type.DOUBLE  => DoubleGenerator(schema, rnd)
       case Schema.Type.BOOLEAN => ???
       case Schema.Type.NULL    => NullGenerator(schema)
     }
@@ -83,6 +83,17 @@ case class IntGenerator(schema: Schema, rnd: Random = new Random()) extends Avro
 case class LongGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker {
   private var seq: Long = -1
   def generate(): Long = { seq += 1; seq }
+}
+
+/** A DOUBLE schema generates a random floating point number
+  *
+  * @param schema
+  *   a schema of type DOUBLE
+  * @param rnd
+  *   random number generator (for reproducibility if desired)
+  */
+case class DoubleGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker {
+  def generate(): Double = rnd.nextDouble()
 }
 
 /** A NULL schema generates only null.
