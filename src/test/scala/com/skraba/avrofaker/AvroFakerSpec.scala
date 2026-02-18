@@ -47,8 +47,17 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     }
   }
 
+  describe("Generating Avro FLOAT data") {
+    it("should generate random numbers") {
+      val gen = AvroFaker(Schema.create(Schema.Type.FLOAT), new Random(0L))
+      gen.generate().asInstanceOf[Float] shouldBe 0.730967787376657f +- 1e-7f
+      gen.generate().asInstanceOf[Float] shouldBe 0.24053641567148587f +- 1e-7f
+      gen.generate().asInstanceOf[Float] shouldBe 0.6374174253501083f +- 1e-7f
+    }
+  }
+
   describe("Generating Avro DOUBLE data") {
-    it("should create a sequence by default") {
+    it("should generate random numbers") {
       val gen = AvroFaker(Schema.create(Schema.Type.DOUBLE), new Random(0L))
       gen.generate().toString.toDouble shouldBe 0.730967787376657 +- 1e-14
       gen.generate().toString.toDouble shouldBe 0.24053641567148587 +- 1e-14
