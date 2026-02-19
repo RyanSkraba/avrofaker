@@ -65,6 +65,15 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     }
   }
 
+  describe("Generating Avro BOOLEAN data") {
+    it("should generate random booelans") {
+      val gen = AvroFaker(Schema.create(Schema.Type.BOOLEAN), new Random(0L))
+      gen.generate() shouldBe true
+      gen.generate() shouldBe true
+      gen.generate() shouldBe false
+    }
+  }
+
   describe("Generating Avro NULL data") {
     it("should only ever generate NULL") {
       val gen = AvroFaker(Schema.create(Schema.Type.NULL), new Random(0L))
