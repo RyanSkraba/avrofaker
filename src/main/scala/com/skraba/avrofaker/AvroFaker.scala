@@ -20,7 +20,7 @@ object AvroFaker {
       case Schema.Type.ARRAY   => ???
       case Schema.Type.MAP     => ???
       case Schema.Type.UNION   => ???
-      case Schema.Type.FIXED   => ???
+      case Schema.Type.FIXED   => FixedGenerator(schema, rnd)
       case Schema.Type.STRING  => StringGenerator(schema, rnd)
       case Schema.Type.BYTES   => ???
       case Schema.Type.INT     => IntGenerator(schema, rnd)
@@ -48,6 +48,17 @@ case class RecordGenerator(schema: Schema, rnd: Random = new Random()) extends A
     fieldGenerators.map { case (f, fgen) => rb.set(f, fgen.generate()) }
     rb.build()
   }
+}
+
+/** A FIXED schema generates a byte array of the expected size.
+  *
+  * @param schema
+  *   a schema of type FIXED
+  * @param rnd
+  *   random number generator (for reproducibility if desired)
+  */
+case class FixedGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker {
+  def generate(): Array[Byte] = rnd.nextBytes(schema.getFixedSize)
 }
 
 /** A STRING schema generates a 10 character string.
