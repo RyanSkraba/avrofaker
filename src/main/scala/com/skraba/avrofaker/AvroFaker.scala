@@ -19,7 +19,7 @@ object AvroFaker {
       case Schema.Type.ENUM    => ???
       case Schema.Type.ARRAY   => ???
       case Schema.Type.MAP     => ???
-      case Schema.Type.UNION   => ???
+      case Schema.Type.UNION   => UnionGenerator(schema, rnd)
       case Schema.Type.FIXED   => FixedGenerator(schema, rnd)
       case Schema.Type.STRING  => StringGenerator(schema, rnd)
       case Schema.Type.BYTES   => ???
@@ -41,13 +41,25 @@ object AvroFaker {
   *   random number generator (for reproducibility if desired)
   */
 case class RecordGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker {
-  private val fieldGenerators: Map[Field, AvroFaker] =
+  private val internalGen: Map[Field, AvroFaker] =
     schema.getFields.asScala.map((f: Field) => f -> AvroFaker(f.schema(), rnd)).toMap
   def generate(): GenericRecord = {
     val rb = new GenericRecordBuilder(schema)
-    fieldGenerators.map { case (f, fgen) => rb.set(f, fgen.generate()) }
+    internalGen.map { case (f, fgen) => rb.set(f, fgen.generate()) }
     rb.build()
   }
+}
+
+/** A UNION schema generates any of its possible schemas with equal probability.
+  *
+  * @param schema
+  *   a schema of type UNION
+  * @param rnd
+  *   random number generator (for reproducibility if desired)
+  */
+case class UnionGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker {
+  private val internalGen: Seq[AvroFaker] = schema.getTypes.asScala.map(AvroFaker(_, rnd)).toSeq
+  def generate(): Any = internalGen(rnd.nextInt(internalGen.size)).generate()
 }
 
 /** A FIXED schema generates a byte array of the expected size.
