@@ -22,7 +22,7 @@ object AvroFaker {
       case Schema.Type.UNION   => UnionGenerator(schema, rnd)
       case Schema.Type.FIXED   => FixedGenerator(schema, rnd)
       case Schema.Type.STRING  => StringGenerator(schema, rnd)
-      case Schema.Type.BYTES   => ???
+      case Schema.Type.BYTES   => BytesGenerator(schema, rnd)
       case Schema.Type.INT     => IntGenerator(schema, rnd)
       case Schema.Type.LONG    => LongGenerator(schema, rnd)
       case Schema.Type.FLOAT   => FloatGenerator(schema, rnd)
@@ -82,6 +82,17 @@ case class FixedGenerator(schema: Schema, rnd: Random = new Random()) extends Av
   */
 case class StringGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker {
   def generate(): String = rnd.alphanumeric.take(10).mkString
+}
+
+/** A BYTES schema generates a byte array between 5 and 10 bytes.
+  *
+  * @param schema
+  *   a schema of type BYTES
+  * @param rnd
+  *   random number generator (for reproducibility if desired)
+  */
+case class BytesGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker {
+  def generate(): Array[Byte] = rnd.nextBytes(5 + rnd.nextInt(5))
 }
 
 /** An INT schema generates an increasing sequence starting from zero.

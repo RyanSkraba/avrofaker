@@ -38,6 +38,15 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     }
   }
 
+  describe("Generating Avro BYTES data") {
+    it("should create variable byte arrays by default") {
+      val gen = AvroFaker(Schema.create(Schema.Type.BYTES), new Random(0L))
+      gen.generate() shouldBe Array(56, 81, -39, -44, 122)
+      gen.generate() shouldBe Array(-10, -55, 45, -93, 58, -16, 29)
+      gen.generate() shouldBe Array(3, 37, -12, 29, 62, -70)
+    }
+  }
+
   describe("Generating Avro INT data") {
     it("should create a sequence by default") {
       val gen = AvroFaker(Schema.create(Schema.Type.INT), new Random(0L))
