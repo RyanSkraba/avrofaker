@@ -16,7 +16,7 @@ object AvroFaker {
   def apply(schema: Schema, rnd: Random = new Random()): AvroFaker = {
     schema.getType match {
       case Schema.Type.RECORD  => RecordGenerator(schema, rnd)
-      case Schema.Type.ENUM    => ???
+      case Schema.Type.ENUM    => EnumGenerator(schema, rnd)
       case Schema.Type.ARRAY   => ???
       case Schema.Type.MAP     => ???
       case Schema.Type.UNION   => UnionGenerator(schema, rnd)
@@ -48,6 +48,18 @@ case class RecordGenerator(schema: Schema, rnd: Random = new Random()) extends A
     internalGen.map { case (f, fgen) => rb.set(f, fgen.generate()) }
     rb.build()
   }
+}
+
+/** An ENUM schema generates its Enum symbols (as strings) with equal probability.
+  *
+  * @param schema
+  *   a schema of type RECORD
+  * @param rnd
+  *   random number generator (for reproducibility if desired)
+  */
+case class EnumGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker {
+  private val symbols = schema.getEnumSymbols.asScala.toSeq
+  def generate(): String = symbols(rnd.nextInt(symbols.size))
 }
 
 /** A UNION schema generates any of its possible schemas with equal probability.

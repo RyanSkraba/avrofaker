@@ -20,6 +20,16 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     }
   }
 
+  describe("Generating Avro ENUM data") {
+    it("should pick symbols randomly") {
+      val schema = SchemaBuilder.enumeration("Example").symbols("A", "B", "C", "D", "E");
+      val gen = AvroFaker(schema, new Random(0L))
+      gen.generate() shouldBe "A"
+      gen.generate() shouldBe "D"
+      gen.generate() shouldBe "E"
+    }
+  }
+
   describe("Generating Avro FIXED data") {
     it("should create byte arrays by default") {
       val gen = AvroFaker(Schema.createFixed("Example", "", "", 4), new Random(0L))
