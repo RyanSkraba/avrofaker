@@ -30,6 +30,24 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     }
   }
 
+  describe("Generating Avro UNION data") {
+    it("should generate data from the union types with equal probability") {
+      val gen = AvroFaker(
+        Schema.createUnion(Schema.create(Schema.Type.NULL), Schema.create(Schema.Type.INT)),
+        new Random(0L)
+      )
+      gen.generate() shouldBe 0
+      gen.generate() shouldBe 1
+      Option(gen.generate()) shouldBe None
+      gen.generate() shouldBe 2
+      gen.generate() shouldBe 3
+      Option(gen.generate()) shouldBe None
+      gen.generate() shouldBe 4
+      Option(gen.generate()) shouldBe None
+      gen.generate() shouldBe 5
+    }
+  }
+
   describe("Generating Avro FIXED data") {
     it("should create byte arrays by default") {
       val gen = AvroFaker(Schema.createFixed("Example", "", "", 4), new Random(0L))
