@@ -29,7 +29,15 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
       gen.generate() shouldBe "E"
     }
   }
-
+  describe("Generating Avro ARRAY data") {
+    it("should create arrays of its element type") {
+      val schema = SchemaBuilder.array().items().stringBuilder().endString()
+      val gen = AvroFaker(schema, new Random(0L))
+      gen.generate() shouldBe Array("CzLNHBFHuR", "vbI1iI19Wj")
+      gen.generate() shouldBe Array("GR8UNWutFR", "ZvWebpA5WH")
+      gen.generate() shouldBe Array("yqts0coJXQ", "qPyuxbr589", "wyJzS2SuiH", "rAOB2RuvBb")
+    }
+  }
   describe("Generating Avro UNION data") {
     it("should generate data from the union types with equal probability") {
       val gen = AvroFaker(
