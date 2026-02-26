@@ -18,7 +18,7 @@ object AvroFaker {
       case Schema.Type.RECORD  => RecordGenerator(schema, rnd)
       case Schema.Type.ENUM    => EnumGenerator(schema, rnd)
       case Schema.Type.ARRAY   => ArrayGenerator(schema, rnd)
-      case Schema.Type.MAP     => ???
+      case Schema.Type.MAP     => MapGenerator(schema, rnd)
       case Schema.Type.UNION   => UnionGenerator(schema, rnd)
       case Schema.Type.FIXED   => FixedGenerator(schema, rnd)
       case Schema.Type.STRING  => StringGenerator(schema, rnd)
@@ -72,6 +72,20 @@ case class EnumGenerator(schema: Schema, rnd: Random = new Random()) extends Avr
 case class ArrayGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker {
   private val internalGen: AvroFaker = AvroFaker(schema.getElementType, rnd)
   def generate(): Array[Any] = Array.fill(2 + rnd.nextInt(3))(internalGen.generate())
+}
+
+/** A MAP schema generates 2 to 5 elements of its value type and a 10 character key
+  *
+  * @param schema
+  *   a schema of type MAP
+  * @param rnd
+  *   random number generator (for reproducibility if desired)
+  */
+case class MapGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker {
+  private val internalKGen: StringGenerator = StringGenerator(schema, rnd)
+  private val internalVGen: AvroFaker = AvroFaker(schema.getValueType, rnd)
+  def generate(): Map[String, Any] =
+    Array.fill(2 + rnd.nextInt(3))(internalKGen.generate() -> internalVGen.generate()).toMap
 }
 
 /** A UNION schema generates any of its possible schemas with equal probability.
