@@ -5,7 +5,7 @@ import org.apache.avro.Schema.Field
 import org.apache.avro.generic.{GenericRecord, GenericRecordBuilder}
 
 import scala.jdk.CollectionConverters.CollectionHasAsScala
-import scala.util.Random
+import scala.util.{Random, Try}
 
 /** Given a schema, the AvroGenerator creates data that matches it. */
 sealed trait AvroFaker {
@@ -153,8 +153,16 @@ case class IntGenerator(schema: Schema, rnd: Random = new Random()) extends Avro
   *   random number generator (for reproducibility if desired)
   */
 case class LongGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker {
-  private var seq: Long = -1
-  def generate(): Long = { seq += 1; seq }
+  private val min = Option(schema.getProp("number.min")).map(_.toLong).getOrElse(0L)
+  private val max = Option(schema.getProp("number.max")).map(_.toLong).getOrElse(Long.MaxValue)
+  private val step = Option(schema.getProp("number.step")).map(_.toLong).getOrElse(1L)
+  private var current: Long = min
+  def generate(): Long = {
+    val next = current;
+    current = Try(math.addExact(current, step)).getOrElse(min)
+    if (current >= max) current = min
+    next
+  }
 }
 
 /** A FLOAT schema generates a random floating point number

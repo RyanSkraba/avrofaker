@@ -107,9 +107,31 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
   describe("Generating Avro LONG data") {
     it("should create a sequence by default") {
       val gen = AvroFaker(Schema.create(Schema.Type.LONG), new Random(0L))
-      gen.generate() shouldBe 0L
-      gen.generate() shouldBe 1L
-      gen.generate() shouldBe 2L
+      LazyList.continually(gen.generate()).take(5) shouldBe Seq(0, 1, 2, 3, 4)
+    }
+
+    it("should start at the minimum") {
+      val schema = Schema.create(Schema.Type.LONG)
+      schema.addProp("number.min", "10")
+      val gen = AvroFaker(schema, new Random(0L))
+      LazyList.continually(gen.generate()).take(5) shouldBe Seq(10, 11, 12, 13, 14)
+    }
+
+    it("should rotate before reaching the maximum") {
+      val schema = Schema.create(Schema.Type.LONG)
+      schema.addProp("number.min", "1")
+      schema.addProp("number.max", "4")
+      val gen = AvroFaker(schema, new Random(0L))
+      LazyList.continually(gen.generate()).take(5) shouldBe Seq(1, 2, 3, 1, 2)
+    }
+
+    it("should have a configurable step before reaching the maximum") {
+      val schema = Schema.create(Schema.Type.LONG)
+      schema.addProp("number.min", "-10")
+      schema.addProp("number.max", "9")
+      schema.addProp("number.step", "5")
+      val gen = AvroFaker(schema, new Random(0L))
+      LazyList.continually(gen.generate()).take(5) shouldBe Seq(-10, -5, 0, 5, -10)
     }
   }
 
