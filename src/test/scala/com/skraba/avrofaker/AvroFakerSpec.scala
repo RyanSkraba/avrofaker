@@ -133,6 +133,15 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
       val gen = AvroFaker(schema, new Random(0L))
       LazyList.continually(gen.generate()).take(5) shouldBe Seq(-10, -5, 0, 5, -10)
     }
+
+    it("should support the random strategy as well") {
+      val schema = Schema.create(Schema.Type.LONG)
+      schema.addProp("number.min", "-1")
+      schema.addProp("number.max", "2")
+      schema.addProp("number.strategy", "random")
+      val gen = AvroFaker(schema, new Random(0L))
+      LazyList.continually(gen.generate()).take(10) shouldBe Seq(-1, 0, 0, 1, 1, 1, 1, -1, -1, 1)
+    }
   }
 
   describe("Generating Avro FLOAT data") {

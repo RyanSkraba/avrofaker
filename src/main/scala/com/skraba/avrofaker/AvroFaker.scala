@@ -156,12 +156,17 @@ case class LongGenerator(schema: Schema, rnd: Random = new Random()) extends Avr
   private val min = Option(schema.getProp("number.min")).map(_.toLong).getOrElse(0L)
   private val max = Option(schema.getProp("number.max")).map(_.toLong).getOrElse(Long.MaxValue)
   private val step = Option(schema.getProp("number.step")).map(_.toLong).getOrElse(1L)
+  private val strategy = Option(schema.getProp("number.strategy"))
   private var current: Long = min
   def generate(): Long = {
-    val next = current;
-    current = Try(math.addExact(current, step)).getOrElse(min)
-    if (current >= max) current = min
-    next
+    strategy match {
+      case Some("random") => min + rnd.nextLong(max - min)
+      case _ =>
+        val next = current;
+        current = Try(math.addExact(current, step)).getOrElse(min)
+        if (current >= max) current = min
+        next
+    }
   }
 }
 
