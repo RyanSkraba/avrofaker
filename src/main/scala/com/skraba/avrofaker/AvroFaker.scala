@@ -141,7 +141,10 @@ case class BytesGenerator(schema: Schema, rnd: Random = new Random()) extends Av
   *   random number generator (for reproducibility if desired)
   */
 case class IntGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker {
-  private val internalGen = LongGenerator(schema, rnd)
+  private val internalGen = {
+    val lGen = LongGenerator(schema, rnd)
+    if (lGen.max > Int.MaxValue) lGen.copy(maxOpt = Some(Int.MaxValue)) else lGen
+  }
   def generate(): Int = internalGen.generate().toInt
 }
 
@@ -152,9 +155,9 @@ case class IntGenerator(schema: Schema, rnd: Random = new Random()) extends Avro
   * @param rnd
   *   random number generator (for reproducibility if desired)
   */
-case class LongGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker {
-  private val min = Option(schema.getProp("number.min")).map(_.toLong).getOrElse(0L)
-  private val max = Option(schema.getProp("number.max")).map(_.toLong).getOrElse(Long.MaxValue)
+case class LongGenerator(schema: Schema, rnd: Random = new Random(), maxOpt: Option[Long] = None) extends AvroFaker {
+  val min = Option(schema.getProp("number.min")).map(_.toLong).getOrElse(0L)
+  val max: Long = maxOpt.getOrElse(Option(schema.getProp("number.max")).map(_.toLong).getOrElse(Long.MaxValue))
   private val step = Option(schema.getProp("number.step")).map(_.toLong).getOrElse(1L)
   private val strategy = Option(schema.getProp("number.strategy"))
   private var current: Long = min

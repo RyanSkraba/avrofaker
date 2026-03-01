@@ -95,52 +95,70 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     }
   }
 
-  describe("Generating Avro INT data") {
-    it("should create a sequence by default") {
-      val gen = AvroFaker(Schema.create(Schema.Type.INT), new Random(0L))
-      gen.generate() shouldBe 0
-      gen.generate() shouldBe 1
-      gen.generate() shouldBe 2
+  // LONG and INT schema types are identical except for the return type
+  for (schemaType <- Seq(Schema.Type.INT, Schema.Type.LONG))
+    describe(s"Generating Avro $schemaType data (common)") {
+
+      def gen10(schema: Schema): Seq[Any] = {
+        val generator = AvroFaker(schema, new Random(0L))
+        val values = LazyList.continually(generator.generate()).take(10)
+        values.head shouldBe (if (schemaType == Schema.Type.INT) a[Int] else a[Long])
+        values
+      }
+
+      it("should create a sequence by default") {
+        gen10(Schema.create(schemaType)) shouldBe Seq(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
+      }
+
+      it("should start at the minimum") {
+        val schema = Schema.create(schemaType)
+        schema.addProp("number.min", "10")
+        gen10(schema) shouldBe Seq(10, 11, 12, 13, 14, 15, 16, 17, 18, 19)
+      }
+
+      it("should rotate before reaching the maximum") {
+        val schema = Schema.create(schemaType)
+        schema.addProp("number.min", "1")
+        schema.addProp("number.max", "4")
+        gen10(schema) shouldBe Seq(1, 2, 3, 1, 2, 3, 1, 2, 3, 1)
+      }
+
+      it("should have a configurable step before reaching the maximum") {
+        val schema = Schema.create(schemaType)
+        schema.addProp("number.min", "-10")
+        schema.addProp("number.max", "10")
+        schema.addProp("number.step", "3")
+        gen10(schema) shouldBe Seq(-10, -7, -4, -1, 2, 5, 8, -10, -7, -4)
+      }
+
+      it("should support the random strategy with min and max") {
+        val schema = Schema.create(schemaType)
+        schema.addProp("number.min", "-1")
+        schema.addProp("number.max", "2")
+        schema.addProp("number.strategy", "random")
+        gen10(schema) shouldBe Seq(-1, 0, 0, 1, 1, 1, 1, -1, -1, 1)
+      }
+    }
+
+  describe("Generating Avro LONG data") {
+    it("should generate random numbers") {
+      val schema = Schema.create(Schema.Type.LONG)
+      schema.addProp("number.strategy", "random")
+      val gen = AvroFaker(schema, new Random(0L))
+      val values = LazyList.continually(gen.generate()).take(4)
+      values.head shouldBe a[Long]
+      values shouldBe Seq(1340999404015745395L, 4053417136674644310L, 8448822068277548669L, 2675956896518692271L)
     }
   }
 
-  describe("Generating Avro LONG data") {
-    it("should create a sequence by default") {
-      val gen = AvroFaker(Schema.create(Schema.Type.LONG), new Random(0L))
-      LazyList.continually(gen.generate()).take(5) shouldBe Seq(0, 1, 2, 3, 4)
-    }
-
-    it("should start at the minimum") {
-      val schema = Schema.create(Schema.Type.LONG)
-      schema.addProp("number.min", "10")
-      val gen = AvroFaker(schema, new Random(0L))
-      LazyList.continually(gen.generate()).take(5) shouldBe Seq(10, 11, 12, 13, 14)
-    }
-
-    it("should rotate before reaching the maximum") {
-      val schema = Schema.create(Schema.Type.LONG)
-      schema.addProp("number.min", "1")
-      schema.addProp("number.max", "4")
-      val gen = AvroFaker(schema, new Random(0L))
-      LazyList.continually(gen.generate()).take(5) shouldBe Seq(1, 2, 3, 1, 2)
-    }
-
-    it("should have a configurable step before reaching the maximum") {
-      val schema = Schema.create(Schema.Type.LONG)
-      schema.addProp("number.min", "-10")
-      schema.addProp("number.max", "9")
-      schema.addProp("number.step", "5")
-      val gen = AvroFaker(schema, new Random(0L))
-      LazyList.continually(gen.generate()).take(5) shouldBe Seq(-10, -5, 0, 5, -10)
-    }
-
-    it("should support the random strategy as well") {
-      val schema = Schema.create(Schema.Type.LONG)
-      schema.addProp("number.min", "-1")
-      schema.addProp("number.max", "2")
+  describe("Generating Avro INT data") {
+    it("should generate random numbers") {
+      val schema = Schema.create(Schema.Type.INT)
       schema.addProp("number.strategy", "random")
       val gen = AvroFaker(schema, new Random(0L))
-      LazyList.continually(gen.generate()).take(10) shouldBe Seq(-1, 0, 0, 1, 1, 1, 1, -1, -1, 1)
+      val values = LazyList.continually(gen.generate()).take(4)
+      values.head shouldBe a[Int]
+      values shouldBe Seq(711764125, 1302116448, 663681053, 251269761)
     }
   }
 
