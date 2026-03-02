@@ -7,13 +7,13 @@ import org.apache.avro.generic.{GenericRecord, GenericRecordBuilder}
 import scala.jdk.CollectionConverters.CollectionHasAsScala
 import scala.util.{Random, Try}
 
-/** Given a schema, the AvroGenerator creates data that matches it. */
-sealed trait AvroFaker {
-  def generate(): Any;
+/** Given a schema, the AvroFaker creates data that matches it. */
+sealed trait AvroFaker[T] {
+  def generate(): T;
 }
 
 object AvroFaker {
-  def apply(schema: Schema, rnd: Random = new Random()): AvroFaker = {
+  def apply(schema: Schema, rnd: Random = new Random()): AvroFaker[?] = {
     schema.getType match {
       case Schema.Type.RECORD  => RecordGenerator(schema, rnd)
       case Schema.Type.ENUM    => EnumGenerator(schema, rnd)
@@ -40,8 +40,8 @@ object AvroFaker {
   * @param rnd
   *   random number generator (for reproducibility if desired)
   */
-case class RecordGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker {
-  private val internalGen: Map[Field, AvroFaker] =
+case class RecordGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker[GenericRecord] {
+  private val internalGen: Map[Field, AvroFaker[?]] =
     schema.getFields.asScala.map((f: Field) => f -> AvroFaker(f.schema(), rnd)).toMap
   def generate(): GenericRecord = {
     val rb = new GenericRecordBuilder(schema)
@@ -57,7 +57,7 @@ case class RecordGenerator(schema: Schema, rnd: Random = new Random()) extends A
   * @param rnd
   *   random number generator (for reproducibility if desired)
   */
-case class EnumGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker {
+case class EnumGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker[String] {
   private val symbols = schema.getEnumSymbols.asScala.toSeq
   def generate(): String = symbols(rnd.nextInt(symbols.size))
 }
@@ -69,8 +69,8 @@ case class EnumGenerator(schema: Schema, rnd: Random = new Random()) extends Avr
   * @param rnd
   *   random number generator (for reproducibility if desired)
   */
-case class ArrayGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker {
-  private val internalGen: AvroFaker = AvroFaker(schema.getElementType, rnd)
+case class ArrayGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker[Array[Any]] {
+  private val internalGen: AvroFaker[?] = AvroFaker(schema.getElementType, rnd)
   def generate(): Array[Any] = Array.fill(2 + rnd.nextInt(3))(internalGen.generate())
 }
 
@@ -81,9 +81,9 @@ case class ArrayGenerator(schema: Schema, rnd: Random = new Random()) extends Av
   * @param rnd
   *   random number generator (for reproducibility if desired)
   */
-case class MapGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker {
+case class MapGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker[Map[String, Any]] {
   private val internalKGen: StringGenerator = StringGenerator(schema, rnd)
-  private val internalVGen: AvroFaker = AvroFaker(schema.getValueType, rnd)
+  private val internalVGen: AvroFaker[?] = AvroFaker(schema.getValueType, rnd)
   def generate(): Map[String, Any] =
     Array.fill(2 + rnd.nextInt(3))(internalKGen.generate() -> internalVGen.generate()).toMap
 }
@@ -95,8 +95,8 @@ case class MapGenerator(schema: Schema, rnd: Random = new Random()) extends Avro
   * @param rnd
   *   random number generator (for reproducibility if desired)
   */
-case class UnionGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker {
-  private val internalGen: Seq[AvroFaker] = schema.getTypes.asScala.map(AvroFaker(_, rnd)).toSeq
+case class UnionGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker[Any] {
+  private val internalGen: Seq[AvroFaker[?]] = schema.getTypes.asScala.map(AvroFaker(_, rnd)).toSeq
   def generate(): Any = internalGen(rnd.nextInt(internalGen.size)).generate()
 }
 
@@ -107,7 +107,7 @@ case class UnionGenerator(schema: Schema, rnd: Random = new Random()) extends Av
   * @param rnd
   *   random number generator (for reproducibility if desired)
   */
-case class FixedGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker {
+case class FixedGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker[Array[Byte]] {
   def generate(): Array[Byte] = rnd.nextBytes(schema.getFixedSize)
 }
 
@@ -118,7 +118,7 @@ case class FixedGenerator(schema: Schema, rnd: Random = new Random()) extends Av
   * @param rnd
   *   random number generator (for reproducibility if desired)
   */
-case class StringGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker {
+case class StringGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker[String] {
   def generate(): String = rnd.alphanumeric.take(10).mkString
 }
 
@@ -129,7 +129,7 @@ case class StringGenerator(schema: Schema, rnd: Random = new Random()) extends A
   * @param rnd
   *   random number generator (for reproducibility if desired)
   */
-case class BytesGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker {
+case class BytesGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker[Array[Byte]] {
   def generate(): Array[Byte] = rnd.nextBytes(5 + rnd.nextInt(5))
 }
 
@@ -140,10 +140,20 @@ case class BytesGenerator(schema: Schema, rnd: Random = new Random()) extends Av
   * @param rnd
   *   random number generator (for reproducibility if desired)
   */
-case class IntGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker {
-  private val internalGen = {
-    val lGen = LongGenerator(schema, rnd)
-    if (lGen.max > Int.MaxValue) lGen.copy(maxOpt = Some(Int.MaxValue)) else lGen
+case class IntGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker[Int] {
+  private val internalGen = Option(schema.getProp("number.strategy")) match {
+    case Some("random") =>
+      LongRandomGenerator(
+        min = Option(schema.getProp("number.min")).map(_.toLong).getOrElse(Int.MinValue),
+        max = Option(schema.getProp("number.max")).map(_.toLong).getOrElse(Int.MaxValue),
+        rnd
+      )
+    case _ =>
+      LongSequenceGenerator(
+        start = Option(schema.getProp("number.min")).map(_.toLong).getOrElse(0L),
+        end = Option(schema.getProp("number.max")).map(_.toLong).getOrElse(Int.MaxValue),
+        step = Option(schema.getProp("number.step")).map(_.toLong).getOrElse(1L)
+      )
   }
   def generate(): Int = internalGen.generate().toInt
 }
@@ -155,22 +165,51 @@ case class IntGenerator(schema: Schema, rnd: Random = new Random()) extends Avro
   * @param rnd
   *   random number generator (for reproducibility if desired)
   */
-case class LongGenerator(schema: Schema, rnd: Random = new Random(), maxOpt: Option[Long] = None) extends AvroFaker {
-  val min = Option(schema.getProp("number.min")).map(_.toLong).getOrElse(0L)
-  val max: Long = maxOpt.getOrElse(Option(schema.getProp("number.max")).map(_.toLong).getOrElse(Long.MaxValue))
-  private val step = Option(schema.getProp("number.step")).map(_.toLong).getOrElse(1L)
-  private val strategy = Option(schema.getProp("number.strategy"))
-  private var current: Long = min
-  def generate(): Long = {
-    strategy match {
-      case Some("random") => min + rnd.nextLong(max - min)
-      case _ =>
-        val next = current;
-        current = Try(math.addExact(current, step)).getOrElse(min)
-        if (current >= max) current = min
-        next
-    }
+case class LongGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker[Long] {
+
+  private val internalGen = Option(schema.getProp("number.strategy")) match {
+    case Some("random") =>
+      LongRandomGenerator(
+        min = Option(schema.getProp("number.min")).map(_.toLong).getOrElse(Long.MinValue),
+        max = Option(schema.getProp("number.max")).map(_.toLong).getOrElse(Long.MaxValue),
+        rnd
+      )
+    case _ =>
+      LongSequenceGenerator(
+        start = Option(schema.getProp("number.min")).map(_.toLong).getOrElse(0L),
+        end = Option(schema.getProp("number.max")).map(_.toLong).getOrElse(Long.MaxValue),
+        step = Option(schema.getProp("number.step")).map(_.toLong).getOrElse(1L)
+      )
   }
+
+  def generate(): Long = internalGen.generate()
+}
+
+/** A generator that generates whole numbers from `start` (inclusive) to `end` (exclusive), counting by `step`. When the
+  * end of the sequence is reached, it repeats.
+  * @param start
+  * @param end
+  * @param step
+  */
+case class LongSequenceGenerator(start: Long = 0, end: Long = Long.MaxValue, step: Long = 1) extends AvroFaker[Long] {
+  private var current: Long = start
+  def generate(): Long = {
+    val next = current;
+    current = Try(math.addExact(current, step)).getOrElse(start)
+    if (current >= end) current = start
+    next
+  }
+}
+
+/** A generator that generates whole numbers from `start` (inclusive) to `end` (exclusive), counting by `step`. When the
+  * end of the sequence is reached, it repeats.
+  * @param start
+  * @param end
+  * @param step
+  */
+case class LongRandomGenerator(min: Long = 0, max: Long = Long.MaxValue, rnd: Random = new Random())
+    extends AvroFaker[Long] {
+  def generate(): Long = rnd.between(min, max)
 }
 
 /** A FLOAT schema generates a random floating point number
@@ -180,7 +219,7 @@ case class LongGenerator(schema: Schema, rnd: Random = new Random(), maxOpt: Opt
   * @param rnd
   *   random number generator (for reproducibility if desired)
   */
-case class FloatGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker {
+case class FloatGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker[Float] {
   private val internalGen = DoubleGenerator(schema, rnd)
   def generate(): Float = internalGen.generate().toFloat
 }
@@ -192,7 +231,7 @@ case class FloatGenerator(schema: Schema, rnd: Random = new Random()) extends Av
   * @param rnd
   *   random number generator (for reproducibility if desired)
   */
-case class DoubleGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker {
+case class DoubleGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker[Double] {
   def generate(): Double = rnd.nextDouble()
 }
 
@@ -203,8 +242,8 @@ case class DoubleGenerator(schema: Schema, rnd: Random = new Random()) extends A
   * @param rnd
   *   random number generator (for reproducibility if desired)
   */
-case class BooleanGenerator(schema: Schema, rnd: Random) extends AvroFaker {
-  def generate(): Any = rnd.nextBoolean()
+case class BooleanGenerator(schema: Schema, rnd: Random) extends AvroFaker[Boolean] {
+  def generate(): Boolean = rnd.nextBoolean()
 }
 
 /** A NULL schema generates only null.
@@ -214,6 +253,6 @@ case class BooleanGenerator(schema: Schema, rnd: Random) extends AvroFaker {
   * @param rnd
   *   random number generator (for reproducibility if desired)
   */
-case class NullGenerator(schema: Schema) extends AvroFaker {
-  def generate(): Any = null
+case class NullGenerator(schema: Schema) extends AvroFaker[Void] {
+  def generate(): Void = null
 }

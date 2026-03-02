@@ -147,7 +147,7 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
       val gen = AvroFaker(schema, new Random(0L))
       val values = LazyList.continually(gen.generate()).take(4)
       values.head shouldBe a[Long]
-      values shouldBe Seq(1340999404015745395L, 4053417136674644310L, 8448822068277548669L, 2675956896518692271L)
+      values shouldBe Seq(-4962768465676381896L, 4437113781045784766L, -6688467811848818630L, -8292973307042192125L)
     }
   }
 
@@ -158,7 +158,7 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
       val gen = AvroFaker(schema, new Random(0L))
       val values = LazyList.continually(gen.generate()).take(4)
       values.head shouldBe a[Int]
-      values shouldBe Seq(711764125, 1302116448, 663681053, 251269761)
+      values shouldBe Seq(-1630935619, -1483802595, -864264928, -530909147)
     }
   }
 
