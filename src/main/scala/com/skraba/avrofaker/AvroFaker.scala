@@ -1,5 +1,6 @@
 package com.skraba.avrofaker
 
+import com.skraba.avrofaker.AvroFaker._
 import org.apache.avro.Schema
 import org.apache.avro.Schema.Field
 import org.apache.avro.generic.{GenericRecord, GenericRecordBuilder}
@@ -13,6 +14,13 @@ sealed trait AvroFaker[T] {
 }
 
 object AvroFaker {
+
+  val PropMin: String = "min"
+  val PropMax: String = "max"
+  val PropStart: String = "start"
+  val PropEnd: String = "end"
+  val PropStep: String = "step"
+
   def apply(schema: Schema, rnd: Random = new Random()): AvroFaker[?] = {
     schema.getType match {
       case Schema.Type.RECORD  => RecordGenerator(schema, rnd)
@@ -141,20 +149,7 @@ case class BytesGenerator(schema: Schema, rnd: Random = new Random()) extends Av
   *   random number generator (for reproducibility if desired)
   */
 case class IntGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker[Int] {
-  private val internalGen = Option(schema.getProp("number.strategy")) match {
-    case Some("random") =>
-      LongRandomGenerator(
-        min = Option(schema.getProp("number.min")).map(_.toLong).getOrElse(Int.MinValue),
-        max = Option(schema.getProp("number.max")).map(_.toLong).getOrElse(Int.MaxValue),
-        rnd
-      )
-    case _ =>
-      LongSequenceGenerator(
-        start = Option(schema.getProp("number.min")).map(_.toLong).getOrElse(0L),
-        end = Option(schema.getProp("number.max")).map(_.toLong).getOrElse(Int.MaxValue),
-        step = Option(schema.getProp("number.step")).map(_.toLong).getOrElse(1L)
-      )
-  }
+  private val internalGen = LongGenerator(schema, rnd, min = Int.MinValue, max = Int.MaxValue)
   def generate(): Int = internalGen.generate().toInt
 }
 
@@ -165,23 +160,25 @@ case class IntGenerator(schema: Schema, rnd: Random = new Random()) extends Avro
   * @param rnd
   *   random number generator (for reproducibility if desired)
   */
-case class LongGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker[Long] {
-
-  private val internalGen = Option(schema.getProp("number.strategy")) match {
-    case Some("random") =>
+case class LongGenerator(
+    schema: Schema,
+    rnd: Random = new Random(),
+    min: Long = Long.MinValue,
+    max: Long = Long.MaxValue
+) extends AvroFaker[Long] {
+  private val internalGen =
+    if (schema.propsContainsKey(PropMin) || schema.propsContainsKey(PropMax))
       LongRandomGenerator(
-        min = Option(schema.getProp("number.min")).map(_.toLong).getOrElse(Long.MinValue),
-        max = Option(schema.getProp("number.max")).map(_.toLong).getOrElse(Long.MaxValue),
+        min = Option(schema.getProp(PropMin)).map(_.toLong).getOrElse(min),
+        max = Option(schema.getProp(PropMax)).map(_.toLong).getOrElse(max),
         rnd
       )
-    case _ =>
+    else
       LongSequenceGenerator(
-        start = Option(schema.getProp("number.min")).map(_.toLong).getOrElse(0L),
-        end = Option(schema.getProp("number.max")).map(_.toLong).getOrElse(Long.MaxValue),
-        step = Option(schema.getProp("number.step")).map(_.toLong).getOrElse(1L)
+        start = Option(schema.getProp(PropStart)).map(_.toLong).getOrElse(0L),
+        end = Option(schema.getProp(PropEnd)).map(_.toLong).getOrElse(max),
+        step = Option(schema.getProp(PropStep)).map(_.toLong).getOrElse(1L)
       )
-  }
-
   def generate(): Long = internalGen.generate()
 }
 
