@@ -11,9 +11,22 @@ import scala.util.Random
 class AvroFakerSpec extends AnyFunSpecLike with Matchers {
   // RECORD, ENUM, ARRAY, MAP, UNION, FIXED, STRING, BYTES, INT, LONG, FLOAT, DOUBLE, BOOLEAN, NULL
 
+  val IntSequence: Schema = {
+    val schema = Schema.create(Schema.Type.INT)
+    schema.addProp(PropStart, 0)
+    schema
+  }
+
   describe("Generating Avro RECORD data") {
     it("should create ten character strings by default") {
-      val schema = SchemaBuilder.record("Example").fields().requiredInt("id").requiredString("name").endRecord();
+      val schema = SchemaBuilder
+        .record("Example")
+        .fields()
+        .name("id")
+        .`type`(IntSequence)
+        .noDefault()
+        .requiredString("name")
+        .endRecord();
       val gen = AvroFaker(schema, new Random(0L))
       gen.generate() shouldBe new GenericRecordBuilder(schema).set("id", 0).set("name", "CCzLNHBFHu").build()
       gen.generate() shouldBe new GenericRecordBuilder(schema).set("id", 1).set("name", "RvbI1iI19W").build()
@@ -43,7 +56,7 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
 
   describe("Generating Avro MAP data") {
     it("should create maps of its value type") {
-      val schema = SchemaBuilder.map().values().intBuilder().endInt()
+      val schema = SchemaBuilder.map().values().`type`(IntSequence)
       val gen = AvroFaker(schema, new Random(0L))
       gen.generate() shouldBe Map("CzLNHBFHuR" -> 0, "vbI1iI19Wj" -> 1)
       gen.generate() shouldBe Map("GR8UNWutFR" -> 2, "ZvWebpA5WH" -> 3)
@@ -53,10 +66,7 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
 
   describe("Generating Avro UNION data") {
     it("should generate data from the union types with equal probability") {
-      val gen = AvroFaker(
-        Schema.createUnion(Schema.create(Schema.Type.NULL), Schema.create(Schema.Type.INT)),
-        new Random(0L)
-      )
+      val gen = AvroFaker(Schema.createUnion(Schema.create(Schema.Type.NULL), IntSequence), new Random(0L))
       gen.generate() shouldBe 0
       gen.generate() shouldBe 1
       Option(gen.generate()) shouldBe None
@@ -107,43 +117,38 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
         values
       }
 
-      it("should create a sequence by default") {
-        gen10(Schema.create(schemaType)) shouldBe Seq(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
+      it("should be random by default") {
+        val schema = Schema.create(schemaType)
+        schema.addProp(PropMin, "-1")
+        schema.addProp(PropMax, "2")
+        gen10(schema) shouldBe Seq(-1, 0, 0, 1, 1, 1, 1, -1, -1, 1)
       }
 
-      it("should start at the minimum") {
+      it("should start at the specified value") {
         val schema = Schema.create(schemaType)
         schema.addProp(PropStart, "10")
         gen10(schema) shouldBe Seq(10, 11, 12, 13, 14, 15, 16, 17, 18, 19)
       }
 
-      it("should rotate before reaching the maximum") {
+      it("should rotate before reaching the end") {
         val schema = Schema.create(schemaType)
         schema.addProp(PropStart, "1")
         schema.addProp(PropEnd, "4")
         gen10(schema) shouldBe Seq(1, 2, 3, 1, 2, 3, 1, 2, 3, 1)
       }
 
-      it("should have a configurable step before reaching the maximum") {
+      it("should have a configurable step before reaching the end") {
         val schema = Schema.create(schemaType)
         schema.addProp(PropStart, "-10")
         schema.addProp(PropEnd, "10")
         schema.addProp(PropStep, "3")
         gen10(schema) shouldBe Seq(-10, -7, -4, -1, 2, 5, 8, -10, -7, -4)
       }
-
-      it("should support the random strategy with min and max") {
-        val schema = Schema.create(schemaType)
-        schema.addProp(PropMin, "-1")
-        schema.addProp(PropMax, "2")
-        gen10(schema) shouldBe Seq(-1, 0, 0, 1, 1, 1, 1, -1, -1, 1)
-      }
     }
 
   describe("Generating Avro LONG data") {
     it("should generate random numbers") {
       val schema = Schema.create(Schema.Type.LONG)
-      schema.addProp(PropMin, Long.MinValue)
       val gen = AvroFaker(schema, new Random(0L))
       val values = LazyList.continually(gen.generate()).take(4)
       values.head shouldBe a[Long]
@@ -154,7 +159,6 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
   describe("Generating Avro INT data") {
     it("should generate random numbers") {
       val schema = Schema.create(Schema.Type.INT)
-      schema.addProp(PropMin, Int.MinValue)
       val gen = AvroFaker(schema, new Random(0L))
       val values = LazyList.continually(gen.generate()).take(4)
       values.head shouldBe a[Int]

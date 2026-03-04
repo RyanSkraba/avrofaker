@@ -141,7 +141,8 @@ case class BytesGenerator(schema: Schema, rnd: Random = new Random()) extends Av
   def generate(): Array[Byte] = rnd.nextBytes(5 + rnd.nextInt(5))
 }
 
-/** An INT schema generates an increasing sequence starting from zero.
+/** An INT schema generates an increasing sequence starting from zero, with the same strategies as [[LongGenerator]] but
+  * constrained to Int values.
   *
   * @param schema
   *   a schema of type INT
@@ -149,35 +150,40 @@ case class BytesGenerator(schema: Schema, rnd: Random = new Random()) extends Av
   *   random number generator (for reproducibility if desired)
   */
 case class IntGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker[Int] {
-  private val internalGen = LongGenerator(schema, rnd, min = Int.MinValue, max = Int.MaxValue)
+  private val internalGen = LongGenerator(schema, rnd = rnd)
   def generate(): Int = internalGen.generate().toInt
 }
 
-/** A LONG schema generates an increasing sequence starting from zero.
+/** Generates LONG values with a specific strategy given by the schema properties.
+  *
+  *   - If [[AvroFaker.PropStart]], [[AvroFaker.PropEnd]] or [[AvroFaker.PropStep]] are specified, use a sequence
+  *   - Otherwise generate a random number between [[AvroFaker.PropMin]] and [[AvroFaker.PropMax]]
   *
   * @param schema
-  *   a schema of type LONG
+  *   a schema of type INT or LONG. Although the generated data are Long values, they will be constrained to Integer
+  *   minimums and maximums if this is an INT schema.
   * @param rnd
   *   random number generator (for reproducibility if desired)
   */
 case class LongGenerator(
     schema: Schema,
-    rnd: Random = new Random(),
-    min: Long = Long.MinValue,
-    max: Long = Long.MaxValue
+    rnd: Random = new Random()
 ) extends AvroFaker[Long] {
+  private val (minimum: Long, maximum: Long) =
+    if (schema.getType == Schema.Type.INT) (Int.MinValue.toLong, Int.MaxValue.toLong)
+    else (Long.MinValue, Long.MaxValue)
   private val internalGen =
-    if (schema.propsContainsKey(PropMin) || schema.propsContainsKey(PropMax))
-      LongRandomGenerator(
-        min = Option(schema.getProp(PropMin)).map(_.toLong).getOrElse(min),
-        max = Option(schema.getProp(PropMax)).map(_.toLong).getOrElse(max),
-        rnd
-      )
-    else
+    if (schema.propsContainsKey(PropStart) || schema.propsContainsKey(PropStart) || schema.propsContainsKey(PropStep))
       LongSequenceGenerator(
         start = Option(schema.getProp(PropStart)).map(_.toLong).getOrElse(0L),
-        end = Option(schema.getProp(PropEnd)).map(_.toLong).getOrElse(max),
+        end = Option(schema.getProp(PropEnd)).map(_.toLong).getOrElse(maximum),
         step = Option(schema.getProp(PropStep)).map(_.toLong).getOrElse(1L)
+      )
+    else
+      LongRandomGenerator(
+        min = Option(schema.getProp(PropMin)).map(_.toLong).getOrElse(minimum),
+        max = Option(schema.getProp(PropMax)).map(_.toLong).getOrElse(maximum),
+        rnd
       )
   def generate(): Long = internalGen.generate()
 }
