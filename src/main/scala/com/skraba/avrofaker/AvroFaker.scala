@@ -1,6 +1,7 @@
 package com.skraba.avrofaker
 
 import com.skraba.avrofaker.AvroFaker._
+import net.datafaker.Faker
 import org.apache.avro.Schema
 import org.apache.avro.Schema.Field
 import org.apache.avro.generic.{GenericRecord, GenericRecordBuilder}
@@ -20,6 +21,8 @@ object AvroFaker {
   val PropStart: String = "start"
   val PropEnd: String = "end"
   val PropStep: String = "step"
+
+  val PropFaker: String = "faker"
 
   def apply(schema: Schema, rnd: Random = new Random()): AvroFaker[?] = {
     schema.getType match {
@@ -127,7 +130,26 @@ case class FixedGenerator(schema: Schema, rnd: Random = new Random()) extends Av
   *   random number generator (for reproducibility if desired)
   */
 case class StringGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker[String] {
-  def generate(): String = rnd.alphanumeric.take(10).mkString
+  private val internalGen =
+    if (schema.propsContainsKey(PropFaker)) FakerGenerator(schema.getProp(PropFaker), rnd)
+    else
+      new AvroFaker[String] {
+        override def generate(): String = rnd.alphanumeric.take(10).mkString
+      }
+  def generate(): String = internalGen.generate()
+}
+
+/** Use [[Faker]] to create fake data from the given expression
+  *
+  * @param expression
+  *   A Faker expression from https://www.datafaker.net/documentation/expressions/
+  * @param rnd
+  *   random number generator (for reproducibility if desired)
+  */
+
+case class FakerGenerator(expression: String, rnd: Random = new Random) extends AvroFaker[String] {
+  val faker = new Faker(new java.util.Random(rnd.nextLong()))
+  def generate(): String = faker.expression(expression)
 }
 
 /** A BYTES schema generates a byte array between 5 and 10 bytes.
@@ -191,13 +213,16 @@ case class LongGenerator(
 /** A generator that generates whole numbers from `start` (inclusive) to `end` (exclusive), counting by `step`. When the
   * end of the sequence is reached, it repeats.
   * @param start
+  *   The first number in the sequence
   * @param end
+  *   The last number in the sequence (exclusive)
   * @param step
+  *   The step to count by
   */
 case class LongSequenceGenerator(start: Long = 0, end: Long = Long.MaxValue, step: Long = 1) extends AvroFaker[Long] {
   private var current: Long = start
   def generate(): Long = {
-    val next = current;
+    val next = current
     current = Try(math.addExact(current, step)).getOrElse(start)
     if (current >= end) current = start
     next
@@ -206,9 +231,10 @@ case class LongSequenceGenerator(start: Long = 0, end: Long = Long.MaxValue, ste
 
 /** A generator that generates whole numbers from `start` (inclusive) to `end` (exclusive), counting by `step`. When the
   * end of the sequence is reached, it repeats.
-  * @param start
-  * @param end
-  * @param step
+  * @param min
+  *   The smallest number to be generated, or the lower limit.
+  * @param max
+  *   The upper limit (exclusive), or one more than the largest number to be generated.
   */
 case class LongRandomGenerator(min: Long = 0, max: Long = Long.MaxValue, rnd: Random = new Random())
     extends AvroFaker[Long] {
@@ -253,8 +279,6 @@ case class BooleanGenerator(schema: Schema, rnd: Random) extends AvroFaker[Boole
   *
   * @param schema
   *   a schema of type NULL
-  * @param rnd
-  *   random number generator (for reproducibility if desired)
   */
 case class NullGenerator(schema: Schema) extends AvroFaker[Void] {
   def generate(): Void = null

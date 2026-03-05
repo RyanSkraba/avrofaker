@@ -97,6 +97,17 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     }
   }
 
+  describe("Generating Avro STRING data with DataFaker") {
+    it("should create names") {
+      val schema = Schema.create(Schema.Type.STRING)
+      schema.addProp(PropFaker, "#{Name.first_name} #{Name.last_name}")
+      val gen = AvroFaker(schema, new Random(0L))
+      gen.generate() shouldBe "Kit Graham"
+      gen.generate() shouldBe "Dessie McDermott"
+      gen.generate() shouldBe "Carola Runolfsson"
+    }
+  }
+
   describe("Generating Avro BYTES data") {
     it("should create variable byte arrays by default") {
       val gen = AvroFaker(Schema.create(Schema.Type.BYTES), new Random(0L))
