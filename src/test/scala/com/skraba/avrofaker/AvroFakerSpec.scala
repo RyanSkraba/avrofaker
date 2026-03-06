@@ -95,16 +95,28 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
       gen.generate() shouldBe "RvbI1iI19W"
       gen.generate() shouldBe "jGGR8UNWut"
     }
-  }
 
-  describe("Generating Avro STRING data with DataFaker") {
-    it("should create names") {
+    /** Generate a list from a faker expression. */
+    def genFakeString(expression: String): LazyList[Any] = {
       val schema = Schema.create(Schema.Type.STRING)
-      schema.addProp(PropFaker, "#{Name.first_name} #{Name.last_name}")
+      schema.addProp(PropFaker, expression)
       val gen = AvroFaker(schema, new Random(0L))
-      gen.generate() shouldBe "Kit Graham"
-      gen.generate() shouldBe "Dessie McDermott"
-      gen.generate() shouldBe "Carola Runolfsson"
+      LazyList.continually(gen.generate())
+    }
+
+    it("should create faker data") {
+      // Name examples
+      genFakeString("#{Name.first_name} #{Name.last_name}").take(3) shouldBe Seq(
+        "Kit Graham",
+        "Dessie McDermott",
+        "Carola Runolfsson"
+      )
+      // Address examples
+      genFakeString("#{Address.street_address}\n#{Address.city}, #{Address.country}").take(3) shouldBe Seq(
+        "95986 Langworth Bypass\nCarolahaven, Romania",
+        "996 Thi Circle\nEast Jeanfort, New Caledonia",
+        "1324 O'Reilly Lane\nBernardville, Sweden"
+      )
     }
   }
 
