@@ -28,9 +28,9 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
         .requiredString("name")
         .endRecord();
       val gen = AvroFaker(schema, new Random(0L))
-      gen.generate() shouldBe new GenericRecordBuilder(schema).set("id", 0).set("name", "CCzLNHBFHu").build()
-      gen.generate() shouldBe new GenericRecordBuilder(schema).set("id", 1).set("name", "RvbI1iI19W").build()
-      gen.generate() shouldBe new GenericRecordBuilder(schema).set("id", 2).set("name", "jGGR8UNWut").build()
+      gen.apply() shouldBe new GenericRecordBuilder(schema).set("id", 0).set("name", "CCzLNHBFHu").build()
+      gen.apply() shouldBe new GenericRecordBuilder(schema).set("id", 1).set("name", "RvbI1iI19W").build()
+      gen.apply() shouldBe new GenericRecordBuilder(schema).set("id", 2).set("name", "jGGR8UNWut").build()
     }
   }
 
@@ -38,9 +38,9 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     it("should pick symbols randomly") {
       val schema = SchemaBuilder.enumeration("Example").symbols("A", "B", "C", "D", "E");
       val gen = AvroFaker(schema, new Random(0L))
-      gen.generate() shouldBe "A"
-      gen.generate() shouldBe "D"
-      gen.generate() shouldBe "E"
+      gen.apply() shouldBe "A"
+      gen.apply() shouldBe "D"
+      gen.apply() shouldBe "E"
     }
   }
 
@@ -48,9 +48,9 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     it("should create arrays of its element type") {
       val schema = SchemaBuilder.array().items().stringBuilder().endString()
       val gen = AvroFaker(schema, new Random(0L))
-      gen.generate() shouldBe Array("CzLNHBFHuR", "vbI1iI19Wj")
-      gen.generate() shouldBe Array("GR8UNWutFR", "ZvWebpA5WH")
-      gen.generate() shouldBe Array("yqts0coJXQ", "qPyuxbr589", "wyJzS2SuiH", "rAOB2RuvBb")
+      gen.apply() shouldBe Array("CzLNHBFHuR", "vbI1iI19Wj")
+      gen.apply() shouldBe Array("GR8UNWutFR", "ZvWebpA5WH")
+      gen.apply() shouldBe Array("yqts0coJXQ", "qPyuxbr589", "wyJzS2SuiH", "rAOB2RuvBb")
     }
   }
 
@@ -58,42 +58,42 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     it("should create maps of its value type") {
       val schema = SchemaBuilder.map().values().`type`(IntSequence)
       val gen = AvroFaker(schema, new Random(0L))
-      gen.generate() shouldBe Map("CzLNHBFHuR" -> 0, "vbI1iI19Wj" -> 1)
-      gen.generate() shouldBe Map("GR8UNWutFR" -> 2, "ZvWebpA5WH" -> 3)
-      gen.generate() shouldBe Map("yqts0coJXQ" -> 4, "qPyuxbr589" -> 5, "wyJzS2SuiH" -> 6, "rAOB2RuvBb" -> 7)
+      gen.apply() shouldBe Map("CzLNHBFHuR" -> 0, "vbI1iI19Wj" -> 1)
+      gen.apply() shouldBe Map("GR8UNWutFR" -> 2, "ZvWebpA5WH" -> 3)
+      gen.apply() shouldBe Map("yqts0coJXQ" -> 4, "qPyuxbr589" -> 5, "wyJzS2SuiH" -> 6, "rAOB2RuvBb" -> 7)
     }
   }
 
   describe("Generating Avro UNION data") {
     it("should generate data from the union types with equal probability") {
       val gen = AvroFaker(Schema.createUnion(Schema.create(Schema.Type.NULL), IntSequence), new Random(0L))
-      gen.generate() shouldBe 0
-      gen.generate() shouldBe 1
-      Option(gen.generate()) shouldBe None
-      gen.generate() shouldBe 2
-      gen.generate() shouldBe 3
-      Option(gen.generate()) shouldBe None
-      gen.generate() shouldBe 4
-      Option(gen.generate()) shouldBe None
-      gen.generate() shouldBe 5
+      gen() shouldBe 0
+      gen() shouldBe 1
+      Option(gen()) shouldBe None
+      gen() shouldBe 2
+      gen() shouldBe 3
+      Option(gen()) shouldBe None
+      gen() shouldBe 4
+      Option(gen()) shouldBe None
+      gen() shouldBe 5
     }
   }
 
   describe("Generating Avro FIXED data") {
     it("should create byte arrays by default") {
       val gen = AvroFaker(Schema.createFixed("Example", "", "", 4), new Random(0L))
-      gen.generate() shouldBe Array(96, -76, 32, -69)
-      gen.generate() shouldBe Array(56, 81, -39, -44)
-      gen.generate() shouldBe Array(122, -53, -109, 61)
+      gen() shouldBe Array(96, -76, 32, -69)
+      gen() shouldBe Array(56, 81, -39, -44)
+      gen() shouldBe Array(122, -53, -109, 61)
     }
   }
 
   describe("Generating Avro STRING data") {
     it("should create ten character strings by default") {
       val gen = AvroFaker(Schema.create(Schema.Type.STRING), new Random(0L))
-      gen.generate() shouldBe "CCzLNHBFHu"
-      gen.generate() shouldBe "RvbI1iI19W"
-      gen.generate() shouldBe "jGGR8UNWut"
+      gen() shouldBe "CCzLNHBFHu"
+      gen() shouldBe "RvbI1iI19W"
+      gen() shouldBe "jGGR8UNWut"
     }
 
     /** Generate a list from a faker expression. */
@@ -101,7 +101,7 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
       val schema = Schema.create(Schema.Type.STRING)
       schema.addProp(PropFaker, expression)
       val gen = AvroFaker(schema, new Random(0L))
-      LazyList.continually(gen.generate())
+      LazyList.continually(gen())
     }
 
     it("should create faker data") {
@@ -123,9 +123,9 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
   describe("Generating Avro BYTES data") {
     it("should create variable byte arrays by default") {
       val gen = AvroFaker(Schema.create(Schema.Type.BYTES), new Random(0L))
-      gen.generate() shouldBe Array(56, 81, -39, -44, 122)
-      gen.generate() shouldBe Array(-10, -55, 45, -93, 58, -16, 29)
-      gen.generate() shouldBe Array(3, 37, -12, 29, 62, -70)
+      gen() shouldBe Array(56, 81, -39, -44, 122)
+      gen() shouldBe Array(-10, -55, 45, -93, 58, -16, 29)
+      gen() shouldBe Array(3, 37, -12, 29, 62, -70)
     }
   }
 
@@ -135,7 +135,7 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
 
       def gen10(schema: Schema): Seq[Any] = {
         val generator = AvroFaker(schema, new Random(0L))
-        val values = LazyList.continually(generator.generate()).take(10)
+        val values = LazyList.continually(generator()).take(10)
         values.head shouldBe (if (schemaType == Schema.Type.INT) a[Int] else a[Long])
         values
       }
@@ -173,7 +173,7 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     it("should generate random numbers") {
       val schema = Schema.create(Schema.Type.LONG)
       val gen = AvroFaker(schema, new Random(0L))
-      val values = LazyList.continually(gen.generate()).take(4)
+      val values = LazyList.continually(gen()).take(4)
       values.head shouldBe a[Long]
       values shouldBe Seq(-4962768465676381896L, 4437113781045784766L, -6688467811848818630L, -8292973307042192125L)
     }
@@ -183,7 +183,7 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     it("should generate random numbers") {
       val schema = Schema.create(Schema.Type.INT)
       val gen = AvroFaker(schema, new Random(0L))
-      val values = LazyList.continually(gen.generate()).take(4)
+      val values = LazyList.continually(gen()).take(4)
       values.head shouldBe a[Int]
       values shouldBe Seq(-1630935619, -1483802595, -864264928, -530909147)
     }
@@ -192,37 +192,36 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
   describe("Generating Avro FLOAT data") {
     it("should generate random numbers") {
       val gen = AvroFaker(Schema.create(Schema.Type.FLOAT), new Random(0L))
-      gen.generate().asInstanceOf[Float] shouldBe 0.730967787376657f +- 1e-7f
-      gen.generate().asInstanceOf[Float] shouldBe 0.24053641567148587f +- 1e-7f
-      gen.generate().asInstanceOf[Float] shouldBe 0.6374174253501083f +- 1e-7f
+      gen().asInstanceOf[Float] shouldBe 0.730967787376657f +- 1e-7f
+      gen().asInstanceOf[Float] shouldBe 0.24053641567148587f +- 1e-7f
+      gen().asInstanceOf[Float] shouldBe 0.6374174253501083f +- 1e-7f
     }
   }
 
   describe("Generating Avro DOUBLE data") {
     it("should generate random numbers") {
       val gen = AvroFaker(Schema.create(Schema.Type.DOUBLE), new Random(0L))
-      gen.generate().toString.toDouble shouldBe 0.730967787376657 +- 1e-14
-      gen.generate().toString.toDouble shouldBe 0.24053641567148587 +- 1e-14
-      gen.generate().toString.toDouble shouldBe 0.6374174253501083 +- 1e-14
+      gen().toString.toDouble shouldBe 0.730967787376657 +- 1e-14
+      gen().toString.toDouble shouldBe 0.24053641567148587 +- 1e-14
+      gen().toString.toDouble shouldBe 0.6374174253501083 +- 1e-14
     }
   }
 
   describe("Generating Avro BOOLEAN data") {
     it("should generate random booelans") {
       val gen = AvroFaker(Schema.create(Schema.Type.BOOLEAN), new Random(0L))
-      gen.generate() shouldBe true
-      gen.generate() shouldBe true
-      gen.generate() shouldBe false
+      gen() shouldBe true
+      gen() shouldBe true
+      gen() shouldBe false
     }
   }
 
   describe("Generating Avro NULL data") {
     it("should only ever generate NULL") {
       val gen = AvroFaker(Schema.create(Schema.Type.NULL), new Random(0L))
-      Option(gen.generate()) shouldBe None
-      Option(gen.generate()) shouldBe None
-      Option(gen.generate()) shouldBe None
+      Option(gen()) shouldBe None
+      Option(gen()) shouldBe None
+      Option(gen()) shouldBe None
     }
   }
-
 }
