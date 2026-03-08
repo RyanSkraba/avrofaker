@@ -18,13 +18,17 @@ object AvroFaker {
 
   val PropMin: String = "min"
   val PropMax: String = "max"
+
   val PropStart: String = "start"
   val PropEnd: String = "end"
   val PropStep: String = "step"
 
+  val PropMean: String = "mean"
+  val PropStdDev: String = "stddev"
+
   val PropFaker: String = "faker"
 
-  def apply(schema: Schema, rnd: Random = new Random()): AvroFaker[?] = {
+  def apply(schema: Schema, rnd: Random = new Random()): AvroFaker[_] = {
     schema.getType match {
       case Schema.Type.RECORD  => RecordGenerator(schema, rnd)
       case Schema.Type.ENUM    => EnumGenerator(schema, rnd)
@@ -244,7 +248,7 @@ case class LongRandomGenerator(min: Long = 0, max: Long = Long.MaxValue, rnd: Ra
 /** A FLOAT schema generates a random floating point number
   *
   * @param schema
-  *   a schema of type DOUBLE
+  *   a schema of type FLOAT
   * @param rnd
   *   random number generator (for reproducibility if desired)
   */
@@ -261,7 +265,16 @@ case class FloatGenerator(schema: Schema, rnd: Random = new Random()) extends Av
   *   random number generator (for reproducibility if desired)
   */
 case class DoubleGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker[Double] {
-  def apply(): Double = rnd.nextDouble()
+  private val internalGen =
+    if (schema.propsContainsKey(PropMean) || schema.propsContainsKey(PropStdDev))
+      new AvroFaker[Double] {
+        override def apply(): Double =
+          rnd.nextGaussian() * Option(schema.getProp(PropStdDev)).map(_.toDouble).getOrElse(1d) + Option(
+            schema.getProp(PropMean)
+          ).map(_.toDouble).getOrElse(0d)
+      }
+    else new AvroFaker[Double] { override def apply(): Double = rnd.nextDouble() }
+  def apply(): Double = internalGen()
 }
 
 /** A BOOLEAN schema generates random true/false.

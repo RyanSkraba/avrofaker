@@ -199,11 +199,35 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
   }
 
   describe("Generating Avro DOUBLE data") {
+
+    /** Generate a list from a faker expression. */
+    def genDouble(props: String*): LazyList[Double] = {
+      val schema = Schema.create(Schema.Type.DOUBLE)
+      for (kv <- props.grouped(2) if kv.size > 1)
+        schema.addProp(kv.head, kv(1))
+      val gen = AvroFaker(schema, new Random(0L))
+      LazyList.continually(gen()).map {
+        case d: Double => d
+        case x => {
+          // This will fail here
+          x shouldBe a[Double]
+          0d
+        }
+      }
+    }
+
     it("should generate random numbers") {
-      val gen = AvroFaker(Schema.create(Schema.Type.DOUBLE), new Random(0L))
-      gen().toString.toDouble shouldBe 0.730967787376657 +- 1e-14
-      gen().toString.toDouble shouldBe 0.24053641567148587 +- 1e-14
-      gen().toString.toDouble shouldBe 0.6374174253501083 +- 1e-14
+      val gen = genDouble()
+      gen.head shouldBe 0.730967787376657 +- 1e-14
+      gen(1) shouldBe 0.24053641567148587 +- 1e-14
+      gen(2) shouldBe 0.6374174253501083 +- 1e-14
+    }
+
+    it("should generate guassian distribution") {
+      val gen = genDouble(AvroFaker.PropMean, "0")
+      gen.head shouldBe 0.8025330637390305 +- 1e-14
+      gen(1) shouldBe -0.9015460884175122 +- 1e-14
+      gen(2) shouldBe 2.080920790428163 +- 1e-14
     }
   }
 
