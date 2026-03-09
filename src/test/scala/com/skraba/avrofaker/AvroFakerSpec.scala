@@ -6,16 +6,60 @@ import org.apache.avro.{Schema, SchemaBuilder}
 import org.scalatest.funspec.AnyFunSpecLike
 import org.scalatest.matchers.should.Matchers
 
+import scala.reflect.ClassTag
 import scala.util.Random
 
 class AvroFakerSpec extends AnyFunSpecLike with Matchers {
-  // RECORD, ENUM, ARRAY, MAP, UNION, FIXED, STRING, BYTES, INT, LONG, FLOAT, DOUBLE, BOOLEAN, NULL
 
-  val IntSequence: Schema = {
-    val schema = Schema.create(Schema.Type.INT)
-    schema.addProp(PropStart, 0)
+  /** @param schema
+    *   A schema to modify with the given properties
+    * @param props
+    *   Pairs of property keys and values to apply to the schema
+    * @return
+    *   The instance of the schema passed in, with the properties applied
+    */
+  def applyProps(schema: Schema, props: String*): Schema = {
+    for (kv <- props.grouped(2) if kv.size > 1) {
+      schema.addProp(kv.head, kv(1))
+    }
     schema
   }
+
+  /** Create an AvroFaker from the given schema with the given properties.
+    * @param schema
+    *   The base schema to use
+    * @param props
+    *   Pairs of property keys and values to apply to the schema
+    * @tparam T
+    *   The expected type of the contents being generated
+    * @return
+    *   A LazyList stream of fake values.
+    */
+  def generate[T](schema: Schema, props: String*)(implicit ct: ClassTag[T]): LazyList[T] = {
+    val gen = AvroFaker(applyProps(schema, props: _*), new Random(0L))
+    LazyList.continually(gen()).flatMap {
+      case good: T => Some(good)
+      case bad     =>
+        // This will fail here
+        bad shouldBe a[T]
+        None
+    }
+  }
+
+  /** Create an AvroFaker from the given schema with the given properties.
+    * @param sType
+    *   The base schema type to use
+    * @param props
+    *   Pairs of property keys and values to apply to the schema
+    * @tparam T
+    *   The expected type of the contents being generated
+    * @return
+    *   A LazyList stream of fake values.
+    */
+  def generate[T](sType: Schema.Type, props: String*)(implicit ct: ClassTag[T]): LazyList[T] =
+    generate(Schema.create(sType), props: _*)(ct)
+
+  val IntSequence: Schema = applyProps(Schema.create(Schema.Type.INT), PropStart, "0")
 
   describe("Generating Avro RECORD data") {
     it("should create ten character strings by default") {
@@ -26,7 +70,7 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
         .`type`(IntSequence)
         .noDefault()
         .requiredString("name")
-        .endRecord();
+        .endRecord()
       val gen = AvroFaker(schema, new Random(0L))
       gen.apply() shouldBe new GenericRecordBuilder(schema).set("id", 0).set("name", "CCzLNHBFHu").build()
       gen.apply() shouldBe new GenericRecordBuilder(schema).set("id", 1).set("name", "RvbI1iI19W").build()
@@ -36,7 +80,7 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
 
   describe("Generating Avro ENUM data") {
     it("should pick symbols randomly") {
-      val schema = SchemaBuilder.enumeration("Example").symbols("A", "B", "C", "D", "E");
+      val schema = SchemaBuilder.enumeration("Example").symbols("A", "B", "C", "D", "E")
       val gen = AvroFaker(schema, new Random(0L))
       gen.apply() shouldBe "A"
       gen.apply() shouldBe "D"
@@ -199,32 +243,15 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
   }
 
   describe("Generating Avro DOUBLE data") {
-
-    /** Generate a list from a faker expression. */
-    def genDouble(props: String*): LazyList[Double] = {
-      val schema = Schema.create(Schema.Type.DOUBLE)
-      for (kv <- props.grouped(2) if kv.size > 1)
-        schema.addProp(kv.head, kv(1))
-      val gen = AvroFaker(schema, new Random(0L))
-      LazyList.continually(gen()).map {
-        case d: Double => d
-        case x => {
-          // This will fail here
-          x shouldBe a[Double]
-          0d
-        }
-      }
-    }
-
     it("should generate random numbers") {
-      val gen = genDouble()
+      val gen = generate[Double](Schema.Type.DOUBLE)
       gen.head shouldBe 0.730967787376657 +- 1e-14
       gen(1) shouldBe 0.24053641567148587 +- 1e-14
       gen(2) shouldBe 0.6374174253501083 +- 1e-14
     }
 
     it("should generate guassian distribution") {
-      val gen = genDouble(AvroFaker.PropMean, "0")
+      val gen = generate[Double](Schema.Type.DOUBLE, AvroFaker.PropMean, "0")
       gen.head shouldBe 0.8025330637390305 +- 1e-14
       gen(1) shouldBe -0.9015460884175122 +- 1e-14
       gen(2) shouldBe 2.080920790428163 +- 1e-14
@@ -232,7 +259,7 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
   }
 
   describe("Generating Avro BOOLEAN data") {
-    it("should generate random booelans") {
+    it("should generate random booleans") {
       val gen = AvroFaker(Schema.create(Schema.Type.BOOLEAN), new Random(0L))
       gen() shouldBe true
       gen() shouldBe true
