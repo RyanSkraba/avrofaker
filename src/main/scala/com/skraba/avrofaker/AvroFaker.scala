@@ -10,8 +10,8 @@ import scala.jdk.CollectionConverters.CollectionHasAsScala
 import scala.util.{Random, Try}
 
 /** Given a schema, the AvroFaker creates data that matches it. */
-sealed trait AvroFaker[T] extends Function0[T] {
-  def apply(): T;
+sealed trait AvroFaker[T] extends (() => T) {
+  def apply(): T
 }
 
 object AvroFaker {
@@ -30,19 +30,19 @@ object AvroFaker {
 
   def apply(schema: Schema, rnd: Random = new Random()): AvroFaker[_] = {
     schema.getType match {
-      case Schema.Type.RECORD  => RecordGenerator(schema, rnd)
-      case Schema.Type.ENUM    => EnumGenerator(schema, rnd)
-      case Schema.Type.ARRAY   => ArrayGenerator(schema, rnd)
-      case Schema.Type.MAP     => MapGenerator(schema, rnd)
-      case Schema.Type.UNION   => UnionGenerator(schema, rnd)
-      case Schema.Type.FIXED   => FixedGenerator(schema, rnd)
-      case Schema.Type.STRING  => StringGenerator(schema, rnd)
-      case Schema.Type.BYTES   => BytesGenerator(schema, rnd)
-      case Schema.Type.INT     => IntGenerator(schema, rnd)
-      case Schema.Type.LONG    => LongGenerator(schema, rnd)
-      case Schema.Type.FLOAT   => FloatGenerator(schema, rnd)
-      case Schema.Type.DOUBLE  => DoubleGenerator(schema, rnd)
-      case Schema.Type.BOOLEAN => BooleanGenerator(schema, rnd)
+      case Schema.Type.RECORD  => RecordGenerator(schema, rnd = rnd)
+      case Schema.Type.ENUM    => EnumGenerator(schema, rnd = rnd)
+      case Schema.Type.ARRAY   => ArrayGenerator(schema, rnd = rnd)
+      case Schema.Type.MAP     => MapGenerator(schema, rnd = rnd)
+      case Schema.Type.UNION   => UnionGenerator(schema, rnd = rnd)
+      case Schema.Type.FIXED   => FixedGenerator(schema, rnd = rnd)
+      case Schema.Type.STRING  => StringGenerator(schema, rnd = rnd)
+      case Schema.Type.BYTES   => BytesGenerator(schema, rnd = rnd)
+      case Schema.Type.INT     => IntGenerator(schema, rnd = rnd)
+      case Schema.Type.LONG    => LongGenerator(schema, rnd = rnd)
+      case Schema.Type.FLOAT   => FloatGenerator(schema, rnd = rnd)
+      case Schema.Type.DOUBLE  => DoubleGenerator(schema, rnd = rnd)
+      case Schema.Type.BOOLEAN => BooleanGenerator(schema, rnd = rnd)
       case Schema.Type.NULL    => NullGenerator(schema)
     }
   }
@@ -74,7 +74,12 @@ case class RecordGenerator(schema: Schema, rnd: Random = new Random()) extends A
   */
 case class EnumGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker[String] {
   private val symbols = schema.getEnumSymbols.asScala.toSeq
-  def apply(): String = symbols(rnd.nextInt(symbols.size))
+  private val indexGen = IntGenerator(
+    schema,
+    rnd = rnd,
+    dflts = Map(PropMin -> 0, PropMax -> symbols.size, PropStart -> 0, PropEnd -> symbols.size)
+  )
+  def apply(): String = symbols(indexGen())
 }
 
 /** An ARRAY schema generates 2 to 5 elements of its element type
@@ -175,8 +180,9 @@ case class BytesGenerator(schema: Schema, rnd: Random = new Random()) extends Av
   * @param rnd
   *   random number generator (for reproducibility if desired)
   */
-case class IntGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker[Int] {
-  private val internalGen = LongGenerator(schema, rnd = rnd)
+case class IntGenerator(schema: Schema, rnd: Random = new Random(), dflts: Map[String, Any] = Map.empty)
+    extends AvroFaker[Int] {
+  private val internalGen = LongGenerator(schema, rnd = rnd, dflts = dflts)
   def apply(): Int = internalGen.apply().toInt
 }
 
@@ -193,7 +199,8 @@ case class IntGenerator(schema: Schema, rnd: Random = new Random()) extends Avro
   */
 case class LongGenerator(
     schema: Schema,
-    rnd: Random = new Random()
+    rnd: Random = new Random(),
+    dflts: Map[String, Any] = Map.empty
 ) extends AvroFaker[Long] {
   private val (minimum: Long, maximum: Long) =
     if (schema.getType == Schema.Type.INT) (Int.MinValue.toLong, Int.MaxValue.toLong)
@@ -201,14 +208,14 @@ case class LongGenerator(
   private val internalGen =
     if (schema.propsContainsKey(PropStart) || schema.propsContainsKey(PropStart) || schema.propsContainsKey(PropStep))
       LongSequenceGenerator(
-        start = Option(schema.getProp(PropStart)).map(_.toLong).getOrElse(0L),
-        end = Option(schema.getProp(PropEnd)).map(_.toLong).getOrElse(maximum),
-        step = Option(schema.getProp(PropStep)).map(_.toLong).getOrElse(1L)
+        start = Option(schema.getProp(PropStart)).orElse(dflts.get(PropStart)).map(_.toString.toLong).getOrElse(0),
+        end = Option(schema.getProp(PropEnd)).orElse(dflts.get(PropEnd)).map(_.toString.toLong).getOrElse(maximum),
+        step = Option(schema.getProp(PropStep)).orElse(dflts.get(PropStep)).map(_.toString.toLong).getOrElse(1)
       )
     else
       LongRandomGenerator(
-        min = Option(schema.getProp(PropMin)).map(_.toLong).getOrElse(minimum),
-        max = Option(schema.getProp(PropMax)).map(_.toLong).getOrElse(maximum),
+        min = Option(schema.getProp(PropMin)).orElse(dflts.get(PropMin)).map(_.toString.toLong).getOrElse(minimum),
+        max = Option(schema.getProp(PropMax)).orElse(dflts.get(PropMax)).map(_.toString.toLong).getOrElse(maximum),
         rnd
       )
   def apply(): Long = internalGen.apply()

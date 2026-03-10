@@ -86,6 +86,11 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
       gen.apply() shouldBe "D"
       gen.apply() shouldBe "E"
     }
+
+    it("should pick symbols sequentially") {
+      val gen = generate[String](SchemaBuilder.enumeration("Example").symbols("A", "B", "C", "D", "E"), PropStart, "0")
+      gen.take(10) shouldBe Seq("A", "B", "C", "D", "E", "A", "B", "C", "D", "E")
+    }
   }
 
   describe("Generating Avro ARRAY data") {
