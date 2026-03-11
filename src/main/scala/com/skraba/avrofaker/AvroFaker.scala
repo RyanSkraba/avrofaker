@@ -46,6 +46,28 @@ object AvroFaker {
       case Schema.Type.NULL    => NullGenerator(schema)
     }
   }
+
+  /** Get a Long value from the schema.
+    *
+    * @param schema
+    *   The schema that may have a set of properties.
+    * @param key
+    *   The name of the property to fetch from the schema.
+    * @param dflts
+    *   If the property doesn't exist in the schema, potentially a default to use.
+    * @param fallback
+    *   If there is no property and nodefault, the "final" fallback to use.
+    * @return
+    *   The extracted value of the property.
+    */
+  def getLongProperty(
+      schema: Schema,
+      key: String,
+      fallback: Long,
+      dflts: PartialFunction[String, Any] = PartialFunction.empty
+  ): Long = {
+    Option(schema.getProp(key)).orElse(dflts.lift(key)).map(_.toString.toLong).getOrElse(fallback)
+  }
 }
 
 /** A RECORD schema generates field data according to the schema of its fields.
@@ -180,10 +202,14 @@ case class BytesGenerator(schema: Schema, rnd: Random = new Random()) extends Av
   * @param rnd
   *   random number generator (for reproducibility if desired)
   */
-case class IntGenerator(schema: Schema, rnd: Random = new Random(), dflts: Map[String, Any] = Map.empty)
-    extends AvroFaker[Int] {
-  private val internalGen = LongGenerator(schema, rnd = rnd, dflts = dflts)
-  def apply(): Int = internalGen.apply().toInt
+case class IntGenerator(
+    schema: Schema,
+    rnd: Random = new Random(),
+    dflts: PartialFunction[String, Any] = PartialFunction.empty
+) extends AvroFaker[Int] {
+  private val fn =
+    LongGenerator(schema, rnd = rnd, dflts = dflts.orElse(Map(PropMax -> Int.MaxValue, PropMin -> Int.MinValue)))
+  def apply(): Int = fn.apply().toInt
 }
 
 /** Generates LONG values with a specific strategy given by the schema properties.
@@ -200,7 +226,7 @@ case class IntGenerator(schema: Schema, rnd: Random = new Random(), dflts: Map[S
 case class LongGenerator(
     schema: Schema,
     rnd: Random = new Random(),
-    dflts: Map[String, Any] = Map.empty
+    dflts: PartialFunction[String, Any] = PartialFunction.empty
 ) extends AvroFaker[Long] {
   private val (minimum: Long, maximum: Long) =
     if (schema.getType == Schema.Type.INT) (Int.MinValue.toLong, Int.MaxValue.toLong)
@@ -208,14 +234,14 @@ case class LongGenerator(
   private val internalGen =
     if (schema.propsContainsKey(PropStart) || schema.propsContainsKey(PropStart) || schema.propsContainsKey(PropStep))
       LongSequenceGenerator(
-        start = Option(schema.getProp(PropStart)).orElse(dflts.get(PropStart)).map(_.toString.toLong).getOrElse(0),
-        end = Option(schema.getProp(PropEnd)).orElse(dflts.get(PropEnd)).map(_.toString.toLong).getOrElse(maximum),
-        step = Option(schema.getProp(PropStep)).orElse(dflts.get(PropStep)).map(_.toString.toLong).getOrElse(1)
+        start = getLongProperty(schema, PropStart, 0, dflts),
+        end = getLongProperty(schema, PropEnd, maximum, dflts),
+        step = getLongProperty(schema, PropStep, 1, dflts)
       )
     else
       LongRandomGenerator(
-        min = Option(schema.getProp(PropMin)).orElse(dflts.get(PropMin)).map(_.toString.toLong).getOrElse(minimum),
-        max = Option(schema.getProp(PropMax)).orElse(dflts.get(PropMax)).map(_.toString.toLong).getOrElse(maximum),
+        min = getLongProperty(schema, PropMin, minimum, dflts),
+        max = getLongProperty(schema, PropMax, maximum, dflts),
         rnd
       )
   def apply(): Long = internalGen.apply()
