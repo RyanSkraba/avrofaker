@@ -179,7 +179,7 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
   }
 
   // LONG and INT schema types are identical except for the return type
-  for (schemaType <- Seq(Schema.Type.INT, Schema.Type.LONG))
+  for ((schemaType, ct) <- Seq(Schema.Type.INT -> ClassTag.Int, Schema.Type.LONG -> ClassTag.Long))
     describe(s"Generating Avro $schemaType data (common)") {
 
       def gen10(schema: Schema): Seq[Any] = {
@@ -210,11 +210,8 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
       }
 
       it("should have a configurable step before reaching the end") {
-        val schema = Schema.create(schemaType)
-        schema.addProp(PropStart, "-10")
-        schema.addProp(PropEnd, "10")
-        schema.addProp(PropStep, "3")
-        gen10(schema) shouldBe Seq(-10, -7, -4, -1, 2, 5, 8, -10, -7, -4)
+        val gen = generate(schemaType, PropStart, "-5", PropEnd, "5", PropStep, "3")(ct)
+        gen.take(15) shouldBe Seq(-5, -2, 1, 4, -3, 0, 3, -4, -1, 2, -5, -2, 1, 4, -3)
       }
     }
 

@@ -261,7 +261,7 @@ case class LongSequenceGenerator(start: Long = 0, end: Long = Long.MaxValue, ste
   def apply(): Long = {
     val next = current
     current = Try(math.addExact(current, step)).getOrElse(start)
-    if (current >= end) current = start
+    if (current >= end) current = start + current - end
     next
   }
 }
