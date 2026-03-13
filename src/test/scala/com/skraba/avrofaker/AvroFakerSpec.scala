@@ -88,8 +88,13 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     }
 
     it("should pick symbols sequentially") {
-      val gen = generate[String](SchemaBuilder.enumeration("Example").symbols("A", "B", "C", "D", "E"), PropStart, "0")
-      gen.take(10) shouldBe Seq("A", "B", "C", "D", "E", "A", "B", "C", "D", "E")
+      generate[String](SchemaBuilder.enumeration("Example").symbols("A", "B", "C", "D", "E"), PropStart, "0")
+        .take(10) shouldBe Seq("A", "B", "C", "D", "E", "A", "B", "C", "D", "E")
+    }
+
+    it("should pick symbols sequentially with a step") {
+      generate[String](SchemaBuilder.enumeration("Example").symbols("A", "B", "C", "D", "E"), PropStart, "0", PropStep, "3")
+        .take(10) shouldBe Seq("A", "D", "B", "E", "C", "A", "D", "B", "E", "C")
     }
   }
 
@@ -181,57 +186,34 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
   // LONG and INT schema types are identical except for the return type
   for ((schemaType, ct) <- Seq(Schema.Type.INT -> ClassTag.Int, Schema.Type.LONG -> ClassTag.Long))
     describe(s"Generating Avro $schemaType data (common)") {
-
-      def gen10(schema: Schema): Seq[Any] = {
-        val generator = AvroFaker(schema, new Random(0L))
-        val values = LazyList.continually(generator()).take(10)
-        values.head shouldBe (if (schemaType == Schema.Type.INT) a[Int] else a[Long])
-        values
-      }
-
       it("should be random by default") {
-        val schema = Schema.create(schemaType)
-        schema.addProp(PropMin, "-1")
-        schema.addProp(PropMax, "2")
-        gen10(schema) shouldBe Seq(-1, 0, 0, 1, 1, 1, 1, -1, -1, 1)
+        generate(schemaType, PropMin, "-1", PropMax, "2")(ct).take(10) shouldBe Seq(-1, 0, 0, 1, 1, 1, 1, -1, -1, 1)
       }
 
       it("should start at the specified value") {
-        val schema = Schema.create(schemaType)
-        schema.addProp(PropStart, "10")
-        gen10(schema) shouldBe Seq(10, 11, 12, 13, 14, 15, 16, 17, 18, 19)
+        generate(schemaType, PropStart, "10")(ct).take(10) shouldBe Seq(10, 11, 12, 13, 14, 15, 16, 17, 18, 19)
       }
 
       it("should rotate before reaching the end") {
-        val schema = Schema.create(schemaType)
-        schema.addProp(PropStart, "1")
-        schema.addProp(PropEnd, "4")
-        gen10(schema) shouldBe Seq(1, 2, 3, 1, 2, 3, 1, 2, 3, 1)
+        generate(schemaType, PropStart, "1", PropEnd, "4")(ct).take(10) shouldBe Seq(1, 2, 3, 1, 2, 3, 1, 2, 3, 1)
       }
 
       it("should have a configurable step before reaching the end") {
-        val gen = generate(schemaType, PropStart, "-5", PropEnd, "5", PropStep, "3")(ct)
-        gen.take(15) shouldBe Seq(-5, -2, 1, 4, -3, 0, 3, -4, -1, 2, -5, -2, 1, 4, -3)
+        generate(schemaType, PropStart, "-5", PropEnd, "5", PropStep, "3")(ct).take(15) shouldBe Seq(-5, -2, 1, 4, -3,
+          0, 3, -4, -1, 2, -5, -2, 1, 4, -3)
       }
     }
 
   describe("Generating Avro LONG data") {
     it("should generate random numbers") {
-      val schema = Schema.create(Schema.Type.LONG)
-      val gen = AvroFaker(schema, new Random(0L))
-      val values = LazyList.continually(gen()).take(4)
-      values.head shouldBe a[Long]
-      values shouldBe Seq(-4962768465676381896L, 4437113781045784766L, -6688467811848818630L, -8292973307042192125L)
+      generate[Long](Schema.Type.LONG)
+        .take(4) shouldBe Seq(-4962768465676381896L, 4437113781045784766L, -6688467811848818630L, -8292973307042192125L)
     }
   }
 
   describe("Generating Avro INT data") {
     it("should generate random numbers") {
-      val schema = Schema.create(Schema.Type.INT)
-      val gen = AvroFaker(schema, new Random(0L))
-      val values = LazyList.continually(gen()).take(4)
-      values.head shouldBe a[Int]
-      values shouldBe Seq(-1630935619, -1483802595, -864264928, -530909147)
+      generate[Int](Schema.Type.INT).take(4) shouldBe Seq(-1630935619, -1483802595, -864264928, -530909147)
     }
   }
 
