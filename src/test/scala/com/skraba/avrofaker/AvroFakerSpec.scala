@@ -93,7 +93,13 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     }
 
     it("should pick symbols sequentially with a step") {
-      generate[String](SchemaBuilder.enumeration("Example").symbols("A", "B", "C", "D", "E"), PropStart, "0", PropStep, "3")
+      generate[String](
+        SchemaBuilder.enumeration("Example").symbols("A", "B", "C", "D", "E"),
+        PropStart,
+        "0",
+        PropStep,
+        "3"
+      )
         .take(10) shouldBe Seq("A", "D", "B", "E", "C", "A", "D", "B", "E", "C")
     }
   }
@@ -150,13 +156,14 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
       gen() shouldBe "jGGR8UNWut"
     }
 
-    /** Generate a list from a faker expression. */
-    def genFakeString(expression: String): LazyList[Any] = {
-      val schema = Schema.create(Schema.Type.STRING)
-      schema.addProp(PropFaker, expression)
-      val gen = AvroFaker(schema, new Random(0L))
-      LazyList.continually(gen())
+    it("should have a configurable length") {
+      generate[String](Schema.Type.STRING, PropLength, "5")
+        .take(5) shouldBe Seq("CCzLN", "HBFHu", "RvbI1", "iI19W", "jGGR8")
     }
+
+    /** Generate a list from a faker expression. */
+    def genFakeString(expression: String): LazyList[String] =
+      generate[String](Schema.Type.STRING, PropFaker, expression)
 
     it("should create faker data") {
       // Name examples

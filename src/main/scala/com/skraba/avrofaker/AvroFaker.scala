@@ -26,6 +26,7 @@ object AvroFaker {
   val PropMean: String = "mean"
   val PropStdDev: String = "stddev"
 
+  val PropLength: String = "length"
   val PropFaker: String = "faker"
 
   def apply(schema: Schema, rnd: Random = new Random()): AvroFaker[_] = {
@@ -161,26 +162,19 @@ case class FixedGenerator(schema: Schema, rnd: Random = new Random()) extends Av
   *   random number generator (for reproducibility if desired)
   */
 case class StringGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker[String] {
-  private val internalGen =
-    if (schema.propsContainsKey(PropFaker)) FakerGenerator(schema.getProp(PropFaker), rnd)
+  private val fn =
+    if (schema.propsContainsKey(PropFaker))
+      new AvroFaker[String] {
+        val expression: String = schema.getProp(PropFaker)
+        val faker: Faker = new Faker(new java.util.Random(rnd.nextLong()))
+        def apply(): String = faker.expression(expression)
+      }
     else
       new AvroFaker[String] {
-        override def apply(): String = rnd.alphanumeric.take(10).mkString
+        val length: Int = getLongProperty(schema, PropLength, 10, PartialFunction.empty).toInt
+        override def apply(): String = rnd.alphanumeric.take(length).mkString
       }
-  def apply(): String = internalGen.apply()
-}
-
-/** Use [[Faker]] to create fake data from the given expression
-  *
-  * @param expression
-  *   A Faker expression from https://www.datafaker.net/documentation/expressions/
-  * @param rnd
-  *   random number generator (for reproducibility if desired)
-  */
-
-case class FakerGenerator(expression: String, rnd: Random = new Random) extends AvroFaker[String] {
-  val faker = new Faker(new java.util.Random(rnd.nextLong()))
-  def apply(): String = faker.expression(expression)
+  def apply(): String = fn.apply()
 }
 
 /** A BYTES schema generates a byte array between 5 and 10 bytes.
