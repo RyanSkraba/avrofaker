@@ -67,7 +67,7 @@ object AvroFaker {
       fallback: Long,
       dflts: PartialFunction[String, Any] = PartialFunction.empty
   ): Long = {
-    Option(schema.getProp(key)).orElse(dflts.lift(key)).map(_.toString.toLong).getOrElse(fallback)
+    Option(schema.getObjectProp(key)).orElse(dflts.lift(key)).map(_.toString.toLong).getOrElse(fallback)
   }
 }
 

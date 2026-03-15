@@ -18,10 +18,9 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     * @return
     *   The instance of the schema passed in, with the properties applied
     */
-  def applyProps(schema: Schema, props: String*): Schema = {
-    for (kv <- props.grouped(2) if kv.size > 1) {
-      schema.addProp(kv.head, kv(1))
-    }
+  def applyProps(schema: Schema, props: (String, Any)*): Schema = {
+    for ((key, value) <- props)
+      schema.addProp(key, value)
     schema
   }
 
@@ -35,7 +34,7 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     * @return
     *   A LazyList stream of fake values.
     */
-  def generate[T](schema: Schema, props: String*)(implicit ct: ClassTag[T]): LazyList[T] = {
+  def generate[T](schema: Schema, props: (String, Any)*)(implicit ct: ClassTag[T]): LazyList[T] = {
     val gen = AvroFaker(applyProps(schema, props: _*), new Random(0L))
     LazyList.continually(gen()).flatMap {
       case good: T => Some(good)
@@ -56,10 +55,10 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     * @return
     *   A LazyList stream of fake values.
     */
-  def generate[T](sType: Schema.Type, props: String*)(implicit ct: ClassTag[T]): LazyList[T] =
+  def generate[T](sType: Schema.Type, props: (String, Any)*)(implicit ct: ClassTag[T]): LazyList[T] =
     generate(Schema.create(sType), props: _*)(ct)
 
-  val IntSequence: Schema = applyProps(Schema.create(Schema.Type.INT), PropStart, "0")
+  val IntSequence: Schema = applyProps(Schema.create(Schema.Type.INT), PropStart -> 0)
 
   describe("Generating Avro RECORD data") {
     it("should create ten character strings by default") {
@@ -88,17 +87,15 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     }
 
     it("should pick symbols sequentially") {
-      generate[String](SchemaBuilder.enumeration("Example").symbols("A", "B", "C", "D", "E"), PropStart, "0")
+      generate[String](SchemaBuilder.enumeration("Example").symbols("A", "B", "C", "D", "E"), PropStart -> 0)
         .take(10) shouldBe Seq("A", "B", "C", "D", "E", "A", "B", "C", "D", "E")
     }
 
     it("should pick symbols sequentially with a step") {
       generate[String](
         SchemaBuilder.enumeration("Example").symbols("A", "B", "C", "D", "E"),
-        PropStart,
-        "0",
-        PropStep,
-        "3"
+        PropStart -> 0,
+        PropStep -> 3
       )
         .take(10) shouldBe Seq("A", "D", "B", "E", "C", "A", "D", "B", "E", "C")
     }
@@ -157,13 +154,13 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     }
 
     it("should have a configurable length") {
-      generate[String](Schema.Type.STRING, PropLength, "5")
+      generate[String](Schema.Type.STRING, PropLength -> 5)
         .take(5) shouldBe Seq("CCzLN", "HBFHu", "RvbI1", "iI19W", "jGGR8")
     }
 
     /** Generate a list from a faker expression. */
     def genFakeString(expression: String): LazyList[String] =
-      generate[String](Schema.Type.STRING, PropFaker, expression)
+      generate[String](Schema.Type.STRING, PropFaker -> expression)
 
     it("should create faker data") {
       // Name examples
@@ -194,19 +191,19 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
   for ((schemaType, ct) <- Seq(Schema.Type.INT -> ClassTag.Int, Schema.Type.LONG -> ClassTag.Long))
     describe(s"Generating Avro $schemaType data (common)") {
       it("should be random by default") {
-        generate(schemaType, PropMin, "-1", PropMax, "2")(ct).take(10) shouldBe Seq(-1, 0, 0, 1, 1, 1, 1, -1, -1, 1)
+        generate(schemaType, PropMin -> -1, PropMax -> 2)(ct).take(10) shouldBe Seq(-1, 0, 0, 1, 1, 1, 1, -1, -1, 1)
       }
 
       it("should start at the specified value") {
-        generate(schemaType, PropStart, "10")(ct).take(10) shouldBe Seq(10, 11, 12, 13, 14, 15, 16, 17, 18, 19)
+        generate(schemaType, PropStart -> 10)(ct).take(10) shouldBe Seq(10, 11, 12, 13, 14, 15, 16, 17, 18, 19)
       }
 
       it("should rotate before reaching the end") {
-        generate(schemaType, PropStart, "1", PropEnd, "4")(ct).take(10) shouldBe Seq(1, 2, 3, 1, 2, 3, 1, 2, 3, 1)
+        generate(schemaType, PropStart -> 1, PropEnd -> 4)(ct).take(10) shouldBe Seq(1, 2, 3, 1, 2, 3, 1, 2, 3, 1)
       }
 
       it("should have a configurable step before reaching the end") {
-        generate(schemaType, PropStart, "-5", PropEnd, "5", PropStep, "3")(ct).take(15) shouldBe Seq(-5, -2, 1, 4, -3,
+        generate(schemaType, PropStart -> -5, PropEnd -> 5, PropStep -> 3)(ct).take(15) shouldBe Seq(-5, -2, 1, 4, -3,
           0, 3, -4, -1, 2, -5, -2, 1, 4, -3)
       }
     }
@@ -242,7 +239,7 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     }
 
     it("should generate guassian distribution") {
-      val gen = generate[Double](Schema.Type.DOUBLE, AvroFaker.PropMean, "0")
+      val gen = generate[Double](Schema.Type.DOUBLE, AvroFaker.PropMean -> 0)
       gen.head shouldBe 0.8025330637390305 +- 1e-14
       gen(1) shouldBe -0.9015460884175122 +- 1e-14
       gen(2) shouldBe 2.080920790428163 +- 1e-14
