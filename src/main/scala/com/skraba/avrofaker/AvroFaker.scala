@@ -79,11 +79,11 @@ object AvroFaker {
   *   random number generator (for reproducibility if desired)
   */
 case class RecordGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker[GenericRecord] {
-  private val internalGen: Map[Field, AvroFaker[?]] =
+  private val fn: Map[Field, AvroFaker[?]] =
     schema.getFields.asScala.map((f: Field) => f -> AvroFaker(f.schema(), rnd)).toMap
   def apply(): GenericRecord = {
     val rb = new GenericRecordBuilder(schema)
-    internalGen.map { case (f, fgen) => rb.set(f, fgen.apply()) }
+    fn.map { case (f, fgen) => rb.set(f, fgen.apply()) }
     rb.build()
   }
 }
@@ -202,7 +202,11 @@ case class IntGenerator(
     dflts: PartialFunction[String, Any] = PartialFunction.empty
 ) extends AvroFaker[Int] {
   private val fn =
-    LongGenerator(schema, rnd = rnd, dflts = dflts.orElse(Map(PropMax -> Int.MaxValue, PropMin -> Int.MinValue)))
+    LongGenerator(
+      schema,
+      rnd = rnd,
+      dflts = dflts.orElse(Map(PropEnd -> Int.MaxValue, PropMax -> Int.MaxValue, PropMin -> Int.MinValue))
+    )
   def apply(): Int = fn.apply().toInt
 }
 
@@ -222,54 +226,52 @@ case class LongGenerator(
     rnd: Random = new Random(),
     dflts: PartialFunction[String, Any] = PartialFunction.empty
 ) extends AvroFaker[Long] {
-  private val (minimum: Long, maximum: Long) =
-    if (schema.getType == Schema.Type.INT) (Int.MinValue.toLong, Int.MaxValue.toLong)
-    else (Long.MinValue, Long.MaxValue)
   private val internalGen =
     if (schema.propsContainsKey(PropStart) || schema.propsContainsKey(PropStart) || schema.propsContainsKey(PropStep))
       LongSequenceGenerator(
         start = getLongProperty(schema, PropStart, 0, dflts),
-        end = getLongProperty(schema, PropEnd, maximum, dflts),
+        end = getLongProperty(schema, PropEnd, Long.MaxValue, dflts),
         step = getLongProperty(schema, PropStep, 1, dflts)
       )
     else
       LongRandomGenerator(
-        min = getLongProperty(schema, PropMin, minimum, dflts),
-        max = getLongProperty(schema, PropMax, maximum, dflts),
+        min = getLongProperty(schema, PropMin, Long.MinValue, dflts),
+        max = getLongProperty(schema, PropMax, Long.MaxValue, dflts),
         rnd
       )
   def apply(): Long = internalGen.apply()
-}
 
-/** A generator that generates whole numbers from `start` (inclusive) to `end` (exclusive), counting by `step`. When the
-  * end of the sequence is reached, it repeats.
-  * @param start
-  *   The first number in the sequence
-  * @param end
-  *   The last number in the sequence (exclusive)
-  * @param step
-  *   The step to count by
-  */
-case class LongSequenceGenerator(start: Long = 0, end: Long = Long.MaxValue, step: Long = 1) extends AvroFaker[Long] {
-  private var current: Long = start
-  def apply(): Long = {
-    val next = current
-    current = Try(math.addExact(current, step)).getOrElse(start)
-    if (current >= end) current = start + current - end
-    next
+  /** A generator that generates whole numbers from `start` (inclusive) to `end` (exclusive), counting by `step`. When
+    * the end of the sequence is reached, it repeats.
+    * @param start
+    *   The first number in the sequence
+    * @param end
+    *   The last number in the sequence (exclusive)
+    * @param step
+    *   The step to count by
+    */
+  private[this] case class LongSequenceGenerator(start: Long = 0, end: Long = Long.MaxValue, step: Long = 1)
+      extends AvroFaker[Long] {
+    private var current: Long = start
+    def apply(): Long = {
+      val next = current
+      current = Try(math.addExact(current, step)).getOrElse(start)
+      if (current >= end) current = start + current - end
+      next
+    }
   }
-}
 
-/** A generator that generates whole numbers from `start` (inclusive) to `end` (exclusive), counting by `step`. When the
-  * end of the sequence is reached, it repeats.
-  * @param min
-  *   The smallest number to be generated, or the lower limit.
-  * @param max
-  *   The upper limit (exclusive), or one more than the largest number to be generated.
-  */
-case class LongRandomGenerator(min: Long = 0, max: Long = Long.MaxValue, rnd: Random = new Random())
-    extends AvroFaker[Long] {
-  def apply(): Long = rnd.between(min, max)
+  /** A generator that generates whole numbers from `start` (inclusive) to `end` (exclusive), counting by `step`. When
+    * the end of the sequence is reached, it repeats.
+    * @param min
+    *   The smallest number to be generated, or the lower limit.
+    * @param max
+    *   The upper limit (exclusive), or one more than the largest number to be generated.
+    */
+  private[this] case class LongRandomGenerator(min: Long = 0, max: Long = Long.MaxValue, rnd: Random = new Random())
+      extends AvroFaker[Long] {
+    def apply(): Long = rnd.between(min, max)
+  }
 }
 
 /** A FLOAT schema generates a random floating point number
