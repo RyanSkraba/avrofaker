@@ -221,28 +221,34 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     }
   }
 
-  describe("Generating Avro FLOAT data") {
-    it("should generate random numbers") {
-      val gen = AvroFaker(Schema.create(Schema.Type.FLOAT), new Random(0L))
-      gen().asInstanceOf[Float] shouldBe 0.730967787376657f +- 1e-7f
-      gen().asInstanceOf[Float] shouldBe 0.24053641567148587f +- 1e-7f
-      gen().asInstanceOf[Float] shouldBe 0.6374174253501083f +- 1e-7f
-    }
-  }
+  // DOUBLE and FLOAT schema types are identical except for the precision.  The type is checked in the generate method, so we force it to a Double for the value check
+  for (
+    (schemaType, ct, precision) <- Seq(
+      (Schema.Type.FLOAT, ClassTag.Float, 1e-6),
+      (Schema.Type.DOUBLE, ClassTag.Double, 1e-14)
+    )
+  ) {
+    describe(s"Generating Avro $schemaType data (common)") {
+      it("should generate random numbers") {
+        val gen = generate(schemaType)(ct).map(_.toString.toDouble)
+        gen.head shouldBe 0.730967787376657 +- precision
+        gen(1) shouldBe 0.24053641567148587 +- precision
+        gen(2) shouldBe 0.6374174253501083 +- precision
+      }
 
-  describe("Generating Avro DOUBLE data") {
-    it("should generate random numbers") {
-      val gen = generate[Double](Schema.Type.DOUBLE)
-      gen.head shouldBe 0.730967787376657 +- 1e-14
-      gen(1) shouldBe 0.24053641567148587 +- 1e-14
-      gen(2) shouldBe 0.6374174253501083 +- 1e-14
-    }
+      it("should generate random numbers with a minimum and maximum") {
+        val gen = generate(schemaType, AvroFaker.PropMin -> 10, AvroFaker.PropMax -> 20)(ct).map(_.toString.toDouble)
+        gen.head shouldBe 17.30967787376657 +- precision
+        gen(1) shouldBe 12.405364156714858 +- precision
+        gen(2) shouldBe 16.37417425350108 +- precision
+      }
 
-    it("should generate guassian distribution") {
-      val gen = generate[Double](Schema.Type.DOUBLE, AvroFaker.PropMean -> 0)
-      gen.head shouldBe 0.8025330637390305 +- 1e-14
-      gen(1) shouldBe -0.9015460884175122 +- 1e-14
-      gen(2) shouldBe 2.080920790428163 +- 1e-14
+      it("should generate guassian distribution") {
+        val gen = generate(schemaType, AvroFaker.PropMean -> 0.0)(ct).map(_.toString.toDouble)
+        gen.head shouldBe 0.8025330637390305 +- precision
+        gen(1) shouldBe -0.9015460884175122 +- precision
+        gen(2) shouldBe 2.080920790428163 +- precision
+      }
     }
   }
 
