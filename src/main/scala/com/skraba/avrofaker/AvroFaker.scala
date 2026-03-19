@@ -285,8 +285,7 @@ case class LongGenerator(
     * @param step
     *   The step to count by
     */
-  private[this] case class LongSequenceGenerator(start: Long = 0, end: Long = Long.MaxValue, step: Long = 1)
-      extends AvroFaker[Long] {
+  private[this] case class LongSequenceGenerator(start: Long, end: Long, step: Long) extends AvroFaker[Long] {
     private var current: Long = start
     def apply(): Long = {
       val next = current
@@ -303,7 +302,7 @@ case class LongGenerator(
     * @param max
     *   The upper limit (exclusive), or one more than the largest number to be generated.
     */
-  private[this] case class LongRandomGenerator(min: Long = 0, max: Long = Long.MaxValue) extends AvroFaker[Long] {
+  private[this] case class LongRandomGenerator(min: Long, max: Long) extends AvroFaker[Long] {
     def apply(): Long = rnd.between(min, max)
   }
 }
@@ -331,13 +330,21 @@ case class DoubleGenerator(schema: Schema, rnd: Random = new Random()) extends A
   private val fn =
     if (schema.propsContainsKey(PropMean) || schema.propsContainsKey(PropStdDev))
       DoubleGaussGenerator(
-        mean = getDoubleProperty(schema, PropMean, 0, PartialFunction.empty),
-        stdDev = getDoubleProperty(schema, PropStdDev, 1, PartialFunction.empty)
+        mean = getDoubleProperty(schema, PropMean, 0),
+        stdDev = getDoubleProperty(schema, PropStdDev, 1)
+      )
+    else if (
+      schema.propsContainsKey(PropStart) || schema.propsContainsKey(PropStart) || schema.propsContainsKey(PropStep)
+    )
+      DoubleSequenceGenerator(
+        start = getDoubleProperty(schema, PropStart, 0),
+        end = getDoubleProperty(schema, PropEnd, Double.PositiveInfinity),
+        step = getDoubleProperty(schema, PropStep, 1)
       )
     else
       DoubleRandomGenerator(
-        min = getDoubleProperty(schema, PropMin, 0, PartialFunction.empty),
-        max = getDoubleProperty(schema, PropMax, 1, PartialFunction.empty)
+        min = getDoubleProperty(schema, PropMin, 0),
+        max = getDoubleProperty(schema, PropMax, 1)
       )
 
   def apply(): Double = fn.apply()
@@ -354,6 +361,25 @@ case class DoubleGenerator(schema: Schema, rnd: Random = new Random()) extends A
   /** Generates a double along the gaussian distribution */
   private[this] case class DoubleGaussGenerator(mean: Double, stdDev: Double) extends AvroFaker[Double] {
     def apply(): Double = rnd.nextGaussian() * stdDev + mean
+  }
+
+  /** A generator that generates whole numbers from `start` (inclusive) to `end` (exclusive), counting by `step`. When
+    * the end of the sequence is reached, it repeats.
+    * @param start
+    *   The first number in the sequence
+    * @param end
+    *   The last number in the sequence (exclusive)
+    * @param step
+    *   The step to count by
+    */
+  private[this] case class DoubleSequenceGenerator(start: Double, end: Double, step: Double) extends AvroFaker[Double] {
+    private var current: Double = start
+    def apply(): Double = {
+      val next = current
+      current = current + step
+      if (current >= end) current = start + current - end
+      next
+    }
   }
 }
 

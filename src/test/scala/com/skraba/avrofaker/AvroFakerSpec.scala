@@ -249,6 +249,35 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
         gen(1) shouldBe -0.9015460884175122 +- precision
         gen(2) shouldBe 2.080920790428163 +- precision
       }
+
+      it("should start at the specified value") {
+        generate(schemaType, PropStart -> 10)(ct).map(_.toString.toDouble).take(10) shouldBe Seq(10d, 11d, 12d, 13d,
+          14d, 15d, 16d, 17d, 18d, 19d)
+      }
+
+      it("should rotate before reaching the end") {
+        generate(schemaType, PropStart -> 1, PropEnd -> 4)(ct).map(_.toString.toDouble).take(10) shouldBe Seq(1d, 2d,
+          3d, 1d, 2d, 3d, 1d, 2d, 3d, 1d)
+      }
+
+      it("should start at the specified value at fractional values") {
+        // Note that these values are all perfectly representable in floating point
+        generate(schemaType, PropStart -> 0.5, PropStep -> -0.25)(ct).map(_.toString.toDouble).take(10) shouldBe Seq(
+          0.5, 0.25, 0.0, -0.25, -0.5, -0.75, -1.0, -1.25, -1.5, -1.75)
+      }
+
+      it("should rotate before reaching the end with fractional values") {
+        // Note that these values are all perfectly representable in floating point
+        generate(schemaType, PropStart -> 0.75, PropEnd -> 2.5, PropStep -> 0.5)(ct)
+          .map(_.toString.toDouble)
+          .take(10) shouldBe Seq(0.75, 1.25, 1.75, 2.25, 1.0, 1.5, 2.0, 0.75, 1.25, 1.75)
+      }
+
+      it("should have a configurable step before reaching the end") {
+        generate(schemaType, PropStart -> -5, PropEnd -> 5, PropStep -> 3)(ct)
+          .map(_.toString.toDouble)
+          .take(15) shouldBe Seq(-5d, -2d, 1d, 4d, -3d, 0d, 3d, -4d, -1d, 2d, -5d, -2d, 1d, 4d, -3d)
+      }
     }
   }
 
