@@ -48,6 +48,8 @@ object AvroFaker {
     }
   }
 
+  def getLong(value: Any): () => Long = () => value.toString.toLong
+
   /** Get a Long value from the schema.
     *
     * @param schema
@@ -61,14 +63,15 @@ object AvroFaker {
     * @return
     *   The extracted value of the property.
     */
-  def getLongProperty(
+  def getLong(
       schema: Schema,
       key: String,
       fallback: Long,
       dflts: PartialFunction[String, Any] = PartialFunction.empty
-  ): Long = {
-    Option(schema.getObjectProp(key)).orElse(dflts.lift(key)).map(_.toString.toLong).getOrElse(fallback)
-  }
+  ): () => Long =
+    Option(schema.getObjectProp(key)).orElse(dflts.lift(key)).map(getLong).getOrElse(getLong(fallback))
+
+  def getDouble(value: Any): () => Double = () => value.toString.toDouble
 
   /** Get a Double value from the schema.
     *
@@ -83,14 +86,13 @@ object AvroFaker {
     * @return
     *   The extracted value of the property.
     */
-  def getDoubleProperty(
+  def getDouble(
       schema: Schema,
       key: String,
       fallback: Double,
       dflts: PartialFunction[String, Any] = PartialFunction.empty
-  ): Double = {
-    Option(schema.getObjectProp(key)).orElse(dflts.lift(key)).map(_.toString.toDouble).getOrElse(fallback)
-  }
+  ): () => Double =
+    Option(schema.getObjectProp(key)).orElse(dflts.lift(key)).map(getDouble).getOrElse(getDouble(fallback))
 }
 
 /** A RECORD schema generates field data according to the schema of its fields.
@@ -187,8 +189,9 @@ case class StringGenerator(schema: Schema, rnd: Random = new Random()) extends A
   private val fn =
     if (schema.propsContainsKey(PropFaker))
       StringFakerGenerator(schema.getProp(PropFaker))
-    else
-      StringRandomGenerator(length = getLongProperty(schema, PropLength, 10, PartialFunction.empty).toInt)
+    else {
+      StringRandomGenerator(length = getLong(schema, PropLength, 10, PartialFunction.empty))
+    }
 
   def apply(): String = fn.apply()
 
@@ -197,8 +200,8 @@ case class StringGenerator(schema: Schema, rnd: Random = new Random()) extends A
     * @param length
     *   the size of the string to generate
     */
-  private[this] case class StringRandomGenerator(length: Int = 10) extends AvroFaker[String] {
-    def apply(): String = rnd.alphanumeric.take(length).mkString
+  private[this] case class StringRandomGenerator(length: () => Long) extends AvroFaker[String] {
+    def apply(): String = rnd.alphanumeric.take(length().toInt).mkString
   }
 
   /** Uses Faker to generate a string
@@ -264,14 +267,14 @@ case class LongGenerator(
   private val fn =
     if (schema.propsContainsKey(PropStart) || schema.propsContainsKey(PropStart) || schema.propsContainsKey(PropStep))
       LongSequenceGenerator(
-        start = getLongProperty(schema, PropStart, 0, dflts),
-        end = getLongProperty(schema, PropEnd, Long.MaxValue, dflts),
-        step = getLongProperty(schema, PropStep, 1, dflts)
+        start = getLong(schema, PropStart, 0, dflts),
+        end = getLong(schema, PropEnd, Long.MaxValue, dflts),
+        step = getLong(schema, PropStep, 1, dflts)
       )
     else
       LongRandomGenerator(
-        min = getLongProperty(schema, PropMin, Long.MinValue, dflts),
-        max = getLongProperty(schema, PropMax, Long.MaxValue, dflts)
+        min = getLong(schema, PropMin, Long.MinValue, dflts),
+        max = getLong(schema, PropMax, Long.MaxValue, dflts)
       )
 
   def apply(): Long = fn.apply()
@@ -285,12 +288,16 @@ case class LongGenerator(
     * @param step
     *   The step to count by
     */
-  private[this] case class LongSequenceGenerator(start: Long, end: Long, step: Long) extends AvroFaker[Long] {
-    private var current: Long = start
+  private[this] case class LongSequenceGenerator(start: () => Long, end: () => Long, step: () => Long)
+      extends AvroFaker[Long] {
+    private var current: Long = start()
     def apply(): Long = {
+      lazy val lzyStart = start()
+      lazy val lzyEnd = end()
+      lazy val lzyStep = step()
       val next = current
-      current = Try(math.addExact(current, step)).getOrElse(start)
-      if (current >= end) current = start + current - end
+      current = Try(math.addExact(current, lzyStep)).getOrElse(lzyStart)
+      if (current >= lzyEnd) current = lzyStart + current - lzyEnd
       next
     }
   }
@@ -302,8 +309,8 @@ case class LongGenerator(
     * @param max
     *   The upper limit (exclusive), or one more than the largest number to be generated.
     */
-  private[this] case class LongRandomGenerator(min: Long, max: Long) extends AvroFaker[Long] {
-    def apply(): Long = rnd.between(min, max)
+  private[this] case class LongRandomGenerator(min: () => Long, max: () => Long) extends AvroFaker[Long] {
+    def apply(): Long = rnd.between(min(), max())
   }
 }
 
@@ -330,37 +337,39 @@ case class DoubleGenerator(schema: Schema, rnd: Random = new Random()) extends A
   private val fn =
     if (schema.propsContainsKey(PropMean) || schema.propsContainsKey(PropStdDev))
       DoubleGaussGenerator(
-        mean = getDoubleProperty(schema, PropMean, 0),
-        stdDev = getDoubleProperty(schema, PropStdDev, 1)
+        mean = getDouble(schema, PropMean, 0),
+        stdDev = getDouble(schema, PropStdDev, 1)
       )
     else if (
       schema.propsContainsKey(PropStart) || schema.propsContainsKey(PropStart) || schema.propsContainsKey(PropStep)
     )
       DoubleSequenceGenerator(
-        start = getDoubleProperty(schema, PropStart, 0),
-        end = getDoubleProperty(schema, PropEnd, Double.PositiveInfinity),
-        step = getDoubleProperty(schema, PropStep, 1)
+        start = getDouble(schema, PropStart, 0),
+        end = getDouble(schema, PropEnd, Double.PositiveInfinity),
+        step = getDouble(schema, PropStep, 1)
       )
     else
       DoubleRandomGenerator(
-        min = getDoubleProperty(schema, PropMin, 0),
-        max = getDoubleProperty(schema, PropMax, 1)
+        min = getDouble(schema, PropMin, 0),
+        max = getDouble(schema, PropMax, 1)
       )
 
   def apply(): Double = fn.apply()
 
   /** Generates a random double
     *
-    * @param length
-    *   the size of the string to generate
+    * @param min
+    *   The smallest number to be generated, or the lower limit.
+    * @param max
+    *   The upper limit (exclusive)
     */
-  private[this] case class DoubleRandomGenerator(min: Double, max: Double) extends AvroFaker[Double] {
-    def apply(): Double = rnd.between(min, max)
+  private[this] case class DoubleRandomGenerator(min: () => Double, max: () => Double) extends AvroFaker[Double] {
+    def apply(): Double = rnd.between(min(), max())
   }
 
   /** Generates a double along the gaussian distribution */
-  private[this] case class DoubleGaussGenerator(mean: Double, stdDev: Double) extends AvroFaker[Double] {
-    def apply(): Double = rnd.nextGaussian() * stdDev + mean
+  private[this] case class DoubleGaussGenerator(mean: () => Double, stdDev: () => Double) extends AvroFaker[Double] {
+    def apply(): Double = rnd.nextGaussian() * stdDev() + mean()
   }
 
   /** A generator that generates whole numbers from `start` (inclusive) to `end` (exclusive), counting by `step`. When
@@ -372,12 +381,16 @@ case class DoubleGenerator(schema: Schema, rnd: Random = new Random()) extends A
     * @param step
     *   The step to count by
     */
-  private[this] case class DoubleSequenceGenerator(start: Double, end: Double, step: Double) extends AvroFaker[Double] {
-    private var current: Double = start
+  private[this] case class DoubleSequenceGenerator(start: () => Double, end: () => Double, step: () => Double)
+      extends AvroFaker[Double] {
+    private var current: Double = start()
     def apply(): Double = {
+      lazy val lzyStart = start()
+      lazy val lzyEnd = end()
+      lazy val lzyStep = step()
       val next = current
-      current = current + step
-      if (current >= end) current = start + current - end
+      current = current + lzyStep
+      if (current >= lzyEnd) current = lzyStart + current - lzyEnd
       next
     }
   }
