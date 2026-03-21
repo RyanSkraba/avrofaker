@@ -9,11 +9,20 @@ import org.apache.avro.generic.{GenericRecord, GenericRecordBuilder}
 import scala.jdk.CollectionConverters.CollectionHasAsScala
 import scala.util.{Random, Try}
 
-/** Given a schema, the AvroFaker creates data that matches it. */
-sealed trait AvroFaker[T] extends (() => T) {
-  def apply(): T
-}
-
+/** AvroFaker creates generic Avro data from an annotated Avro schema.
+  *
+  * As a basic example, to generate random integers between 100 and 200:
+  *
+  * {{{
+  * val schema = """{"type": "int", "min": 100, "max": 200}"""
+  * val faker = AvroFaker(new org.apache.avro.Schema.Parser().parse(schema))
+  *
+  * // prints 194 134 191 104 181 117 148 133 122 174 130
+  * for (_ <- 0 to 10) print(s"${faker()} ")
+  * }}}
+  *
+  * Every schema and subschema can be annotated, so you can create awesome, customizable fake data for testing!
+  */
 object AvroFaker {
 
   val PropMin: String = "min"
@@ -93,6 +102,11 @@ object AvroFaker {
       dflts: PartialFunction[String, Any] = PartialFunction.empty
   ): () => Double =
     Option(schema.getObjectProp(key)).orElse(dflts.lift(key)).map(getDouble).getOrElse(getDouble(fallback))
+}
+
+/** Each AvroFaker creates a type of datum, depending on the schema. */
+sealed trait AvroFaker[T] extends (() => T) {
+  def apply(): T
 }
 
 /** A RECORD schema generates field data according to the schema of its fields.
@@ -189,9 +203,8 @@ case class StringGenerator(schema: Schema, rnd: Random = new Random()) extends A
   private val fn =
     if (schema.propsContainsKey(PropFaker))
       StringFakerGenerator(schema.getProp(PropFaker))
-    else {
+    else
       StringRandomGenerator(length = getLong(schema, PropLength, 10, PartialFunction.empty))
-    }
 
   def apply(): String = fn.apply()
 
