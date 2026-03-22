@@ -38,15 +38,15 @@ The value can either be `true` to use the defaults for this strategy, or it can 
 
 If any strategy argument can be found directly in the (parent) annotated schema, it will be used as the default.
 
-| Schema                                             | Summary                                                                                            |
-|----------------------------------------------------|----------------------------------------------------------------------------------------------------|
-| `int`                                              | Uniformly generates a random 32 bit whole number from `-2147483648` to `2147483647`.               |
-| `{"type": "int"}`                                  | :arrow_up: Avro equivalent.                                                                        |
-| `{"type": "int", "random": true}`                  | Uniformly generates a random 32 bit whole number from 0 to **`2147483646`** (see bounds).          |
-| `{"type": "int", "random": {"min": 0}}`            | :arrow_up: Equivalent, but  **random** generating a  whole number from `0` to **`2147483646`**.    |
-| `{"type": "int", "min": 0}`                        | :arrow_up: Equivalent, implicitly choosing the **random** strategy.                                |
-| `{"type": "int", "min": 0, "random": true}`        | :arrow_up: Equivalent, explicitly declaring the strategy but inheriting the `min` from the parent. |
-| `{"type": "int", "min": 100, random": {"min": 0}}` | :arrow_up: Equivalent, because the `min` argument is ignored from the parent when it's supplied.   |
+| Schema                                              | Summary                                                                                            |
+|-----------------------------------------------------|----------------------------------------------------------------------------------------------------|
+| `"int"`                                             | Uniformly generates a random 32 bit whole number from `-2147483648` to `2147483647`.               |
+| `{"type": "int"}`                                   | :arrow_up: Avro equivalent.                                                                        |
+| `{"type": "int", "random": true}`                   | Uniformly generates a random 32 bit whole number from 0 to **`2147483646`** (see bounds).          |
+| `{"type": "int", "random": {"min": 0}}`             | :arrow_up: Equivalent, but  **random** generating a  whole number from `0` to **`2147483646`**.    |
+| `{"type": "int", "min": 0}`                         | :arrow_up: Equivalent, implicitly choosing the **random** strategy.                                |
+| `{"type": "int", "min": 0, "random": true}`         | :arrow_up: Equivalent, explicitly declaring the strategy but inheriting the `min` from the parent. |
+| `{"type": "int", "min": 100, "random": {"min": 0}}` | :arrow_up: Equivalent, because the `min` argument is ignored from the parent when it's supplied.   |
 
 ### `INT` Gaussian distributions
 

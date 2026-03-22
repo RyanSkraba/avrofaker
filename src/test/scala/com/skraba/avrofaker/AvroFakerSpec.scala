@@ -45,20 +45,52 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     }
   }
 
-  /** Create an AvroFaker from the given schema with the given properties.
-    * @param sType
-    *   The base schema type to use
-    * @param props
-    *   Pairs of property keys and values to apply to the schema
-    * @tparam T
-    *   The expected type of the contents being generated
-    * @return
-    *   A LazyList stream of fake values.
-    */
+  def generate[T](schema: String, props: (String, Any)*)(implicit ct: ClassTag[T]): LazyList[T] = {
+    generate[T](new Schema.Parser().parse(schema), props: _*)
+  }
+
   def generate[T](sType: Schema.Type, props: (String, Any)*)(implicit ct: ClassTag[T]): LazyList[T] =
     generate(Schema.create(sType), props: _*)(ct)
 
   val IntSequence: Schema = applyProps(Schema.create(Schema.Type.INT), PropStart -> 0)
+
+  describe("Examples from the readme.md") {
+
+    describe("INT with the random strategy") {
+      val RandomsDefault = Seq(-1630935619, -1483802595, -864264928)
+      val RandomsNonNeg = Seq(711764125, 1302116448, 663681053)
+      val RandomsByte = Seq(187, 212, 61, 155, 163, 79, 140, 29, 152, 200)
+
+      it("should generate a random Int on unannotated INT schemas") {
+        generate[Int](""""int"""").take(3) shouldBe RandomsDefault
+        generate[Int]("""{"type": "int"}""").take(3) shouldBe RandomsDefault
+      }
+      it("should generate a random Int when the random strategy is set") {
+        generate[Int]("""{"type": "int", "random": true}""").take(3) shouldBe RandomsDefault
+      }
+      it("should allow configuring the random strategy with a minimum") {
+        generate[Int]("""{"type": "int", "random": {"min": 0}}""").take(3) shouldBe RandomsNonNeg
+      }
+      it("should implicitly configure the random strategy from the schema annotations") {
+        generate[Int]("""{"type": "int", "min": 0}""").take(3) shouldBe RandomsNonNeg
+      }
+      it("should explicitly choose the random strategy with arguments from the schema annotations") {
+        generate[Int]("""{"type": "int", "min": 0, "random": true}""").take(3) shouldBe RandomsNonNeg
+      }
+      it("should override arguments from the schema annotations") {
+        generate[Int]("""{"type": "int", "min": 100, "random": {"min": 0}}""").take(3) shouldBe RandomsNonNeg
+      }
+      it("should be configurable by the min and the max") {
+        generate[Int]("""{"type": "int", "min": 0, "max": 256}""").take(10) shouldBe RandomsByte
+        generate[Int]("""{"type": "int", "random": {"min": 0, "max": 256}}""").take(10) shouldBe RandomsByte
+        generate[Int]("""{"type": "int", "min": 0, "random": {"max": 256}}""").take(10) shouldBe RandomsByte
+        generate[Int]("""{"type": "int", "min": 100, "random": {"min": 0, "max": 256}}""").take(10) shouldBe RandomsByte
+      }
+      it("should generate random values even if the random strategy is set to false but there is no other strategy") {
+        generate[Int]("""{"type": "int", "random": false}""").take(3) shouldBe RandomsDefault
+      }
+    }
+  }
 
   describe("Generating Avro RECORD data") {
     it("should create ten character strings by default") {

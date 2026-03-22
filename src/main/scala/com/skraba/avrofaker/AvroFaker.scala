@@ -6,7 +6,8 @@ import org.apache.avro.Schema
 import org.apache.avro.Schema.Field
 import org.apache.avro.generic.{GenericRecord, GenericRecordBuilder}
 
-import scala.jdk.CollectionConverters.CollectionHasAsScala
+import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.util.{Random, Try}
 
 /** AvroFaker creates generic Avro data from an annotated Avro schema.
@@ -56,6 +57,13 @@ object AvroFaker {
       case Schema.Type.NULL    => NullGenerator(schema)
     }
   }
+
+  /** An adapter that turns a schema and its annotations into a partial function. */
+  def getPropsFn(schema: Schema): PartialFunction[String, Any] =
+    new PartialFunction[String, Any]() {
+      override def isDefinedAt(key: String): Boolean = schema.propsContainsKey(key)
+      override def apply(key: String): Any = schema.getObjectProp(key)
+    }
 
   def getLong(value: Any): () => Long = () => value.toString.toLong
 
@@ -277,8 +285,20 @@ case class LongGenerator(
     rnd: Random = new Random(),
     dflts: PartialFunction[String, Any] = PartialFunction.empty
 ) extends AvroFaker[Long] {
-  private val fn =
-    if (schema.propsContainsKey(PropStart) || schema.propsContainsKey(PropStart) || schema.propsContainsKey(PropStep))
+  private val fn = {
+    if (schema.propsContainsKey("random") && schema.getObjectProp("random") != false) {
+      val args: String => Option[Any] = (schema.getObjectProp("random") match {
+        case obj: java.util.Map[_, _] => obj.asScala.map { case (k, v) => (k.toString, v) }
+        case _                        => PartialFunction.empty
+      }).orElse(getPropsFn(schema)).orElse(dflts).lift
+
+      LongRandomGenerator(
+        min = () => args("min").map(_.toString.toLong).getOrElse(Long.MinValue),
+        max = () => args("max").map(_.toString.toLong).getOrElse(Long.MaxValue)
+      )
+    } else if (
+      schema.propsContainsKey(PropStart) || schema.propsContainsKey(PropStart) || schema.propsContainsKey(PropStep)
+    )
       LongSequenceGenerator(
         start = getLong(schema, PropStart, 0, dflts),
         end = getLong(schema, PropEnd, Long.MaxValue, dflts),
@@ -289,6 +309,7 @@ case class LongGenerator(
         min = getLong(schema, PropMin, Long.MinValue, dflts),
         max = getLong(schema, PropMax, Long.MaxValue, dflts)
       )
+  }
 
   def apply(): Long = fn.apply()
 
