@@ -26,6 +26,13 @@ import scala.util.{Random, Try}
   */
 object AvroFaker {
 
+  val StrategyRandom: String = "random"
+  val StrategyGauss: String = "gauss"
+  val ArgMin: String = "min"
+  val ArgMax: String = "max"
+  val ArgMean: String = "mean"
+  val ArgStddev: String = "stddev"
+
   val PropMin: String = "min"
   val PropMax: String = "max"
 
@@ -286,7 +293,7 @@ case class LongGenerator(
     dflts: PartialFunction[String, Any] = PartialFunction.empty
 ) extends AvroFaker[Long] {
   private val fn = {
-    if (schema.propsContainsKey("random") && schema.getObjectProp("random") != false) {
+    if (schema.propsContainsKey(StrategyRandom) && schema.getObjectProp(StrategyRandom) != false) {
       val args: String => Option[Any] = (schema.getObjectProp("random") match {
         case obj: java.util.Map[_, _] => obj.asScala.map { case (k, v) => (k.toString, v) }
         case _                        => PartialFunction.empty
@@ -296,6 +303,22 @@ case class LongGenerator(
         min = () => args("min").map(_.toString.toLong).getOrElse(Long.MinValue),
         max = () => args("max").map(_.toString.toLong).getOrElse(Long.MaxValue)
       )
+    } else if (schema.propsContainsKey(StrategyGauss) && schema.getObjectProp(StrategyGauss) != false) {
+      val args = (schema.getObjectProp("gauss") match {
+        case obj: java.util.Map[_, _] => obj.asScala.map { case (k, v) => (k.toString, v) }
+        case _                        => PartialFunction.empty
+      }).orElse(getPropsFn(schema)).orElse(dflts)
+
+      () => DoubleGaussGenerator(args, rnd)().toLong
+
+    } else if (schema.propsContainsKey(ArgMean) || schema.propsContainsKey(ArgStddev)) {
+      val args = (schema.getObjectProp("gauss") match {
+        case obj: java.util.Map[_, _] => obj.asScala.map { case (k, v) => (k.toString, v) }
+        case _                        => PartialFunction.empty
+      }).orElse(getPropsFn(schema)).orElse(dflts)
+
+      () => DoubleGaussGenerator(args, rnd)().toLong
+
     } else if (
       schema.propsContainsKey(PropStart) || schema.propsContainsKey(PropStart) || schema.propsContainsKey(PropStep)
     )
@@ -345,6 +368,23 @@ case class LongGenerator(
     */
   private[this] case class LongRandomGenerator(min: () => Long, max: () => Long) extends AvroFaker[Long] {
     def apply(): Long = rnd.between(min(), max())
+  }
+
+}
+
+/** Generates a double along the gaussian distribution */
+private[this] case class DoubleGaussGenerator(args: PartialFunction[String, Any], rnd: Random = new Random())
+    extends AvroFaker[Double] {
+  val mean: () => Double = () => args.lift(ArgMean).map(_.toString.toDouble).getOrElse(0.0d)
+  val stddev: () => Double = () => args.lift(ArgStddev).map(_.toString.toDouble).getOrElse(100.0d)
+  val min: () => Double = () => args.lift(ArgMin).map(_.toString.toDouble).getOrElse(0.0d)
+  val max: () => Double = () => args.lift(ArgMax).map(_.toString.toDouble).getOrElse(100.0d)
+  def apply(): Double = {
+    lazy val xmin = min()
+    lazy val xmax = max()
+    lazy val xstddev = stddev()
+    lazy val xmean = mean()
+    LazyList.continually(rnd.nextGaussian() * xstddev + xmean).dropWhile(_ < xmin).dropWhile(_ >= xmax).head
   }
 }
 
