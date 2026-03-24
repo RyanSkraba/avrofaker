@@ -52,7 +52,7 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
   def generate[T](sType: Schema.Type, props: (String, Any)*)(implicit ct: ClassTag[T]): LazyList[T] =
     generate(Schema.create(sType), props: _*)(ct)
 
-  val IntSequence: Schema = applyProps(Schema.create(Schema.Type.INT), PropStart -> 0)
+  val IntSequence: Schema = applyProps(Schema.create(Schema.Type.INT), ArgStep -> 1)
 
   describe("Generate INT with the random strategy") {
     val RandomsDefault = Seq(-1630935619, -1483802595, -864264928)
@@ -133,6 +133,64 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     }
   }
 
+  describe("Examples from the readme.md") {
+
+    /*
+
+| Schema                                                  | Summary                                                                                                         |
+|---------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------|
+generate[Int]("""{"type": "int", "sequence": true}`                     generate[Int]("""0`, `1`, `2`, `3`, `4`, `5` until it reaches `2147483646`, then restarts.                                      |
+generate[Int]("""{"type": "int", "step": 1}`                            | :arrow_up: Equivalent, implicitly choosing the **sequence** strategy.                                           |
+generate[Int]("""{"type": "int", "start": 10000}`                       | :arrow_up: `10000`, `10001`, `10002`, `10003`, `10004`, `10005`, implicitly choosing the **sequence** strategy. |
+generate[Int]("""{"type": "int", "step": -1, "max": 4}`                 | `3`, `2`, `1`, `0`, `3`, `2`, etc.                                                                              |
+generate[Int]("""{"type": "int", "start": 3, "max": 4, "step": 3}`      | :arrow_up: Equivalent because of the wrapped remainder, but confusing.                                          |
+generate[Int]("""{"type": "int", "sequence": {"start": 10, "max": 13}}` | `10`, `11`, `12`, `0`, `1`, `2`, etc.                                                                           |
+generate[Int]("""{"type": "int", "sequence": {"start": 10, "max": 13}}` | `10`, `11`, `12`, `0`, `1`, `2`, etc.                                                                           |
+generate[Int]("""{"type": "int", "max": 13, "sequence": {"start": 10}}` | :arrow_up: Equivalent, inheriting the `max` argument from the parent.                                           |
+     */
+    it("should work from the INT Sequences section") {}
+
+    /*
+
+| Schema                                                               | Summary                                                                                                                              |
+|----------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------|
+generate[Int]("""{"type": "int", "value": 123}`                                      | Always generates `123`.                                                                                                              |
+generate[Int]("""{"type": "int", "value": {"value": 123}}`                           | :arrow_up: Equivalent, but useless.                                                                                                  |
+generate[Int]("""{"type": "int", "value": [123, 321]}`                               | Randomly picks `123` or `321`.                                                                                                       |
+generate[Int]("""{"type": "int", "value": {"random": {"min": 0}}}`                   | **random** generating a  whole number from 0 to **2147483646**.                                                                      |
+generate[Int]("""{"type": "int", "max": 4, "value": {"start": 1, "sequence": true}}` | **sequence** generating `1`, `2`, `3`, `0`, `1`, `2`, etc.   Note that the sequence arguments are inherited up to the parent schema. |
+generate[Int]("""{"type": "int", "value": [999, {"random": {"min": 0, "max": 9}}]}`  | Picks `999` 50% of the time, and a single digit number the other 50%.                                                                |
+
+If it is a JSON array, and at the _same_ level as the `value` attribute, there exists an `index` attribute that _is_ a string, then
+
+1. The value of the `index` attribute is used to generate an integer value within the interval [`0`, array size).
+ The process is identical to how a `value` attribute is processed (as a constant, a generator strategy, or an array of generator strategies),
+ with an implicit `min` and `max` supplied to the strategies.
+ If the result happens to be outside the interval, either `min` or `max` is used instead.
+2. The generated integer is used to pick the value in the `value` JSON array that is actually used for the generator.
+
+| Schema                                                                                | Summary                                                                                       |
+|---------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------|
+generate[Int]("""{"type": "int", "value": [123, 321, 999], "index": 0}`                               | Always generates `123`.                                                                       |
+generate[Int]("""{"type": "int", "value": [123, 321, 999], "index": -1}`                              | :arrow_up: Equivalent.                                                                        |
+generate[Int]("""{"type": "int", "value": [123, 321, 999], "index": {"step": 1}}`                     | The index is a sequence `0`,`1`,`2`,`0`,`1`, etc, so alternates `123`,`321`,`999`,`123`, etc. |
+generate[Int]("""{"type": "int", "value": [1,2,3,4,5], "index": {"gauss": {"mean": 2, "stddev": 1}}}` | Picks the numbers `1`,`2`,`3`,`4`,`5` in a rough bell curve.                                  |
+
+
+| Schema                                                      | Summary                 |
+|-------------------------------------------------------------|-------------------------|
+generate[Int]("""{"type": "int", "value": [1,2,3,4,5], "index": "sum"}`     | Always generates `15`.  |
+generate[Int]("""{"type": "int", "value": [1,2,3,4,5], "index": "product"}` | Always generates `120`. |
+generate[Int]("""{"type": "int", "value": [1,2,3,4,5], "index": "min"}`     | Always generates `1`.   |
+generate[Int]("""{"type": "int", "value": [1,2,3,4,5], "index": "max"}`     | Always generates `5`.   |
+generate[Int]("""{"type": "int", "value": [1,2,3,4,5], "index": "mean"}`    | Always generates `3`.   |
+
+     */
+
+    it("should work from the INT Value section ") {}
+
+  }
+
   describe("Generating Avro RECORD data") {
     it("should create ten character strings by default") {
       val schema = SchemaBuilder
@@ -160,15 +218,14 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     }
 
     it("should pick symbols sequentially") {
-      generate[String](SchemaBuilder.enumeration("Example").symbols("A", "B", "C", "D", "E"), PropStart -> 0)
+      generate[String](SchemaBuilder.enumeration("Example").symbols("A", "B", "C", "D", "E"), ArgStep -> 1)
         .take(10) shouldBe Seq("A", "B", "C", "D", "E", "A", "B", "C", "D", "E")
     }
 
     it("should pick symbols sequentially with a step") {
       generate[String](
         SchemaBuilder.enumeration("Example").symbols("A", "B", "C", "D", "E"),
-        PropStart -> 0,
-        PropStep -> 3
+        ArgStep -> 3
       )
         .take(10) shouldBe Seq("A", "D", "B", "E", "C", "A", "D", "B", "E", "C")
     }
@@ -264,20 +321,22 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
   for ((schemaType, ct) <- Seq(Schema.Type.INT -> ClassTag.Int, Schema.Type.LONG -> ClassTag.Long))
     describe(s"Generating Avro $schemaType data (common)") {
       it("should be random by default") {
-        generate(schemaType, PropMin -> -1, PropMax -> 2)(ct).take(10) shouldBe Seq(-1, 0, 0, 1, 1, 1, 1, -1, -1, 1)
+        generate(schemaType, ArgMin -> -1, ArgMax -> 2)(ct).take(10) shouldBe Seq(-1, 0, 0, 1, 1, 1, 1, -1, -1, 1)
       }
 
       it("should start at the specified value") {
-        generate(schemaType, PropStart -> 10)(ct).take(10) shouldBe Seq(10, 11, 12, 13, 14, 15, 16, 17, 18, 19)
+        generate(schemaType, ArgMin -> 10, ArgStep -> 1)(ct).take(10) shouldBe Seq(10, 11, 12, 13, 14, 15, 16, 17, 18,
+          19)
       }
 
       it("should rotate before reaching the end") {
-        generate(schemaType, PropStart -> 1, PropEnd -> 4)(ct).take(10) shouldBe Seq(1, 2, 3, 1, 2, 3, 1, 2, 3, 1)
+        generate(schemaType, ArgMin -> 1, ArgMax -> 4, ArgStep -> 1)(ct).take(10) shouldBe Seq(1, 2, 3, 1, 2, 3, 1, 2,
+          3, 1)
       }
 
       it("should have a configurable step before reaching the end") {
-        generate(schemaType, PropStart -> -5, PropEnd -> 5, PropStep -> 3)(ct).take(15) shouldBe Seq(-5, -2, 1, 4, -3,
-          0, 3, -4, -1, 2, -5, -2, 1, 4, -3)
+        generate(schemaType, ArgMin -> -5, ArgMax -> 5, ArgStep -> 3)(ct).take(15) shouldBe Seq(-5, -2, 1, 4, -3, 0, 3,
+          -4, -1, 2, -5, -2, 1, 4, -3)
       }
     }
 
@@ -310,44 +369,44 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
       }
 
       it("should generate random numbers with a minimum and maximum") {
-        val gen = generate(schemaType, AvroFaker.PropMin -> 10, AvroFaker.PropMax -> 20)(ct).map(_.toString.toDouble)
+        val gen = generate(schemaType, AvroFaker.ArgMin -> 10, AvroFaker.ArgMax -> 20)(ct).map(_.toString.toDouble)
         gen.head shouldBe 17.30967787376657 +- precision
         gen(1) shouldBe 12.405364156714858 +- precision
         gen(2) shouldBe 16.37417425350108 +- precision
       }
 
       it("should generate guassian distribution") {
-        val gen = generate(schemaType, AvroFaker.PropMean -> 0.0)(ct).map(_.toString.toDouble)
+        val gen = generate(schemaType, AvroFaker.ArgMean -> 0.0)(ct).map(_.toString.toDouble)
         gen.head shouldBe 0.8025330637390305 +- precision
         gen(1) shouldBe -0.9015460884175122 +- precision
         gen(2) shouldBe 2.080920790428163 +- precision
       }
 
       it("should start at the specified value") {
-        generate(schemaType, PropStart -> 10)(ct).map(_.toString.toDouble).take(10) shouldBe Seq(10d, 11d, 12d, 13d,
-          14d, 15d, 16d, 17d, 18d, 19d)
+        generate(schemaType, ArgMin -> 10, ArgStep -> 1)(ct).map(_.toString.toDouble).take(10) shouldBe Seq(10d, 11d,
+          12d, 13d, 14d, 15d, 16d, 17d, 18d, 19d)
       }
 
       it("should rotate before reaching the end") {
-        generate(schemaType, PropStart -> 1, PropEnd -> 4)(ct).map(_.toString.toDouble).take(10) shouldBe Seq(1d, 2d,
-          3d, 1d, 2d, 3d, 1d, 2d, 3d, 1d)
+        generate(schemaType, ArgMin -> 1, ArgMax -> 4, ArgStep -> 1)(ct).map(_.toString.toDouble).take(10) shouldBe Seq(
+          1d, 2d, 3d, 1d, 2d, 3d, 1d, 2d, 3d, 1d)
       }
 
       it("should start at the specified value at fractional values") {
         // Note that these values are all perfectly representable in floating point
-        generate(schemaType, PropStart -> 0.5, PropStep -> -0.25)(ct).map(_.toString.toDouble).take(10) shouldBe Seq(
-          0.5, 0.25, 0.0, -0.25, -0.5, -0.75, -1.0, -1.25, -1.5, -1.75)
+        generate(schemaType, ArgMax -> 0.5, ArgStep -> -0.25)(ct).map(_.toString.toDouble).take(10) shouldBe Seq(0.5,
+          0.25, 0.0, -0.25, -0.5, -0.75, -1.0, -1.25, -1.5, -1.75)
       }
 
       it("should rotate before reaching the end with fractional values") {
         // Note that these values are all perfectly representable in floating point
-        generate(schemaType, PropStart -> 0.75, PropEnd -> 2.5, PropStep -> 0.5)(ct)
+        generate(schemaType, ArgMin -> 0.75, ArgMax -> 2.5, ArgStep -> 0.5)(ct)
           .map(_.toString.toDouble)
           .take(10) shouldBe Seq(0.75, 1.25, 1.75, 2.25, 1.0, 1.5, 2.0, 0.75, 1.25, 1.75)
       }
 
       it("should have a configurable step before reaching the end") {
-        generate(schemaType, PropStart -> -5, PropEnd -> 5, PropStep -> 3)(ct)
+        generate(schemaType, ArgMin -> -5, ArgMax -> 5, ArgStep -> 3)(ct)
           .map(_.toString.toDouble)
           .take(15) shouldBe Seq(-5d, -2d, 1d, 4d, -3d, 0d, 3d, -4d, -1d, 2d, -5d, -2d, 1d, 4d, -3d)
       }
