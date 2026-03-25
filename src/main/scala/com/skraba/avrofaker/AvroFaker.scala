@@ -269,7 +269,7 @@ case class IntGenerator(
     rnd: Random = new Random(),
     dflts: PartialFunction[String, Any] = PartialFunction.empty
 ) extends AvroFaker[Int] {
-  private val intDflts = dflts.orElse(Map(ArgMax -> Int.MaxValue, ArgMin -> Int.MinValue))
+  private val intDflts = dflts.orElse(Map(ArgMax -> Int.MaxValue, ArgMin -> Int.MinValue, ArgStddev -> 100L))
 
   private val fn = {
     if (schema.propsContainsKey(StrategyRandom) && schema.getObjectProp(StrategyRandom) != false) {
@@ -303,7 +303,7 @@ case class LongGenerator(
     rnd: Random = new Random(),
     dflts: PartialFunction[String, Any] = PartialFunction.empty
 ) extends AvroFaker[Long] {
-  private val longDflts = dflts.orElse(Map(ArgMax -> Long.MaxValue, ArgMin -> Long.MinValue))
+  private val longDflts = dflts.orElse(Map(ArgMax -> Long.MaxValue, ArgMin -> Long.MinValue, ArgStddev -> 100L))
 
   private val fn = {
     if (schema.propsContainsKey(StrategyRandom) && schema.getObjectProp(StrategyRandom) != false) {
@@ -321,7 +321,7 @@ case class LongGenerator(
   def apply(): Long = fn()
 }
 
-/** Generates a double along the gaussian distribution */
+/** Generates a random long in an interval. */
 private[this] case class LongRandomGenerator(args: PartialFunction[String, Any], rnd: Random = new Random())
     extends AvroFaker[Long] {
   val min: () => Long = () => args.lift(ArgMin).map(_.toString.toLong).getOrElse(Long.MinValue)
@@ -329,34 +329,47 @@ private[this] case class LongRandomGenerator(args: PartialFunction[String, Any],
   def apply(): Long = rnd.between(min(), max())
 }
 
-/** Generates a double along the gaussian distribution */
+/** A faker that generates numbers along the Gauss distribution to have a bell curve nicely centered around a median.
+  *
+  * It can be configured with the following arguments:
+  *
+  *   - `min`: The lower bound (inclusive) of the sequence (Default: 0).
+  *   - `max`: The upper bound (exclusive) of the sequence (No default, this must be supplied).
+  *   - `mean` and `stddev`: The mean and standard deviation to position the bell curve (Default: 0.0 and 1.0 for
+  *     DOUBLE)
+  *
+  * Values outside the `min` and `max` are discarded. Be careful, if your valid interval is rarely drawn from a gaussian
+  * distribution, this generator might be very slow to generate value.
+  */
 private[this] case class DoubleGaussGenerator(args: PartialFunction[String, Any], rnd: Random = new Random())
     extends AvroFaker[Double] {
   val mean: () => Double = () => args.lift(ArgMean).map(_.toString.toDouble).getOrElse(0.0d)
-  val stddev: () => Double = () => args.lift(ArgStddev).map(_.toString.toDouble).getOrElse(100.0d)
-  val min: () => Double = () => args.lift(ArgMin).map(_.toString.toDouble).getOrElse(0.0d)
-  val max: () => Double = () => args.lift(ArgMax).map(_.toString.toDouble).getOrElse(100.0d)
+  val stddev: () => Double = () => args.lift(ArgStddev).map(_.toString.toDouble).getOrElse(1.0d)
+  val min: () => Double = () => args.lift(ArgMin).map(_.toString.toDouble).getOrElse(Double.NegativeInfinity)
+  val max: () => Double = () => args.lift(ArgMax).map(_.toString.toDouble).getOrElse(Double.PositiveInfinity)
   def apply(): Double = {
-    lazy val xmin = min()
-    lazy val xmax = max()
-    lazy val xstddev = stddev()
-    lazy val xmean = mean()
-    LazyList.continually(rnd.nextGaussian() * xstddev + xmean).dropWhile(_ < xmin).dropWhile(_ >= xmax).head
+    lazy val vMin = min()
+    lazy val vMax = max()
+    lazy val vStddev = stddev()
+    lazy val vMean = mean()
+    LazyList.continually(rnd.nextGaussian() * vStddev + vMean).dropWhile(_ < vMin).dropWhile(_ >= vMax).head
   }
 }
 
-/** A generator that generates whole numbers from `start` (inclusive) to `end` (exclusive), counting by `step`. When the
-  * end of the sequence is reached, it repeats.
-  * @param start
-  *   The first number in the sequence
-  * @param end
-  *   The last number in the sequence (exclusive)
-  * @param step
-  *   The step to count by
+/** A generator that generates whole numbers within an interval, moving by a step every time. When the end of the
+  * sequence is reached, it wraps around and repeats.
+  *
+  * It can be configured with the following arguments:
+  *
+  *   - `min`: The lower bound (inclusive) of the sequence (Default: 0).
+  *   - `max`: The upper bound (exclusive) of the sequence (Default: Long.MaxValue for LONG, etc, depending on the
+  *     type).
+  *   - `step`: The distance to move in the interval (Default: 1)
+  *   - `start`: The starting value for the sequence. (Default: depends on the step, whether it starts from the upper or
+  *     lower bound.)
   */
-private[this] case class SequenceFaker[T](args: PartialFunction[String, Any])(implicit
-    num: Numeric[T]
-) extends AvroFaker[T] {
+private[this] case class SequenceFaker[T](args: PartialFunction[String, Any])(implicit num: Numeric[T])
+    extends AvroFaker[T] {
   import num._
   val min: () => T = () => args.lift(ArgMin).map(_.toString).flatMap(num.parseString).getOrElse(num.zero)
   val max: () => T = () => args.lift(ArgMax).map(_.toString).flatMap(num.parseString).getOrElse(num.zero)
