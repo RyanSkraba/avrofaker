@@ -59,72 +59,107 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     val RandomsNonNeg = Seq(711764125, 1302116448, 663681053)
     val RandomsByte = Seq(187, 212, 61, 155, 163, 79, 140, 29, 152, 200)
 
-    it("should generate a random Int on unannotated INT schemas") {
+    /*
+    | `"int"`                                           | Uniformly generates a random 32 bit whole number from `-2147483648` to `2147483646`.             |
+| `{"type": "int"}`                                 | :arrow_up: Avro equivalent.                                                                      |
+| `{"type": "int", "faker": "random"}`              | :arrow_up: Equivalent.                                                                           |
+| `{"type": "int", "faker": {}}`                    | :arrow_up: Equivalent, but useless                                                               |
+| `{"type": "int", "faker": {"faker": "random"}}`   | :arrow_up: Equivalent, but useless.                                                              |
+| `{"type": "int", "faker": "random", "min": 0}`    | Uniformly generates a random 32 bit whole number from 0 to `2147483646`.                         |
+| `{"type": "int", "min": 0}`                       | :arrow_up: Equivalent.                                                                           |
+| `{"type": "int", "faker": {"min": 0}}`            | :arrow_up: Equivalent.                                                                           |
+| `{"type": "int", "min": 100, faker": {"min": 0}}` | :arrow_up: Equivalent, because the `min` argument is ignored from the parent when it's supplied. |
+| `{"type": "int", "min": 0, "max": 256}`           | :Uniformly generates a number from `0` to `255`                                                  |
+
+     */
+
+    it("should use the random strategy on unannotated INT schemas") {
       generate[Int](""""int"""").take(3) shouldBe RandomsDefault
       generate[Int]("""{"type": "int"}""").take(3) shouldBe RandomsDefault
     }
-    it("should generate a random Int when the random strategy is set") {
-      generate[Int]("""{"type": "int", "random": true}""").take(3) shouldBe RandomsDefault
+
+    it("should generate a random Int when the random strategy is explicitly set") {
+      generate[Int]("""{"type": "int", "faker": "random"}""").take(3) shouldBe RandomsDefault
+      generate[Int]("""{"type": "int", "faker": {"faker": "random"}}""").take(3) shouldBe RandomsDefault
     }
+
+    it("should generate a random Int when the random strategy is unset") {
+      generate[Int]("""{"type": "int", "faker": {}}""").take(3) shouldBe RandomsDefault
+    }
+
     it("should allow configuring the random strategy with a minimum") {
-      generate[Int]("""{"type": "int", "random": {"min": 0}}""").take(3) shouldBe RandomsNonNeg
+      generate[Int]("""{"type": "int", "min": 0, "faker": "random"}""").take(3) shouldBe RandomsNonNeg
+      generate[Int]("""{"type": "int", "faker": {"min": 0}}""").take(3) shouldBe RandomsNonNeg
     }
+
     it("should implicitly configure the random strategy from the schema annotations") {
       generate[Int]("""{"type": "int", "min": 0}""").take(3) shouldBe RandomsNonNeg
     }
-    it("should explicitly choose the random strategy with arguments from the schema annotations") {
-      generate[Int]("""{"type": "int", "min": 0, "random": true}""").take(3) shouldBe RandomsNonNeg
-    }
+
     it("should override arguments from the schema annotations") {
-      generate[Int]("""{"type": "int", "min": 100, "random": {"min": 0}}""").take(3) shouldBe RandomsNonNeg
+      generate[Int]("""{"type": "int", "min": 100, "faker": {"min": 0}}""").take(3) shouldBe RandomsNonNeg
     }
+
     it("should be configurable by the min and the max") {
       generate[Int]("""{"type": "int", "min": 0, "max": 256}""").take(10) shouldBe RandomsByte
-      generate[Int]("""{"type": "int", "random": {"min": 0, "max": 256}}""").take(10) shouldBe RandomsByte
-      generate[Int]("""{"type": "int", "min": 0, "random": {"max": 256}}""").take(10) shouldBe RandomsByte
-      generate[Int]("""{"type": "int", "min": 100, "random": {"min": 0, "max": 256}}""").take(10) shouldBe RandomsByte
+      generate[Int]("""{"type": "int", "faker": {"min": 0, "max": 256}}""").take(10) shouldBe RandomsByte
+      generate[Int]("""{"type": "int", "min": 0, "faker": {"max": 256}}""").take(10) shouldBe RandomsByte
+      generate[Int]("""{"type": "int", "min": 100, "faker": {"min": 0, "max": 256}}""").take(10) shouldBe RandomsByte
     }
-    it("should generate random values even if the random strategy is set to false but there is no other strategy") {
-      generate[Int]("""{"type": "int", "random": false}""").take(3) shouldBe RandomsDefault
-    }
+
+    for (maxValue <- Seq("256", "256.1", "256.999"))
+      it(s"should support the max value: $maxValue") {
+        generate[Int](s"""{"type": "int", "min": 0, "max": $maxValue}""").take(10) shouldBe RandomsByte
+      }
   }
 
   describe("Generate INT with the gauss strategy") {
     val GaussDefault = Seq(80, -90, 208, 76, 98, -168, -2, 11, -39, -64)
+    val Gauss100_10 = Seq(108, 90, 120, 107, 109, 83, 99, 101, 96, 93)
+
+    /** | `{"type": "int", "faker": "gauss"}`                                      | Generates a bell curve of numbers centered around `0`, with 95% of the values between `-200` and `200`.                                                         |
+      * |:-------------------------------------------------------------------------|:----------------------------------------------------------------------------------------------------------------------------------------------------------------|
+      * | `{"type": "int", "mean": 0}`                                             | :arrow_up: Equivalent, implicitly choosing the **gauss** strategy.                                                                                              |
+      * | `{"type": "int", "faker": "gauss", "mean": 100, "stddev": 10}`           | Generates numbers centered around `100`, with 95% of the values between `80` and `120`. It's very unlikely but possible that a negative value could occur.      |
+      * | `{"type": "int", "faker": "gauss", "mean": 100, "stddev": 10, "min": 0}` | Generates numbers centered around `100`, with 95% of the values between `80` and `120`, guaranteeing no negative values.                                        |
+      * | `{"type": "int", "min": 0, "faker": {"stddev": 10}}`                     | Generates a bell curve of numbers centered around `0` and standard deviation of `10`, but only accepts positive values (half are thrown away).                  |
+      * | `{"type": "int", "min": 50, "faker": {"mean": 100, "stddev": 10}}`       | :warning: The same bell curve as above, but only numbers > `50`. This is 5 standard deviations from the mean; one one value out of every million will be valid. |
+      */
 
     it(
       "should generate between a bell curve of numbers centered around 0, with 95% of the values between -200 and 200"
     ) {
       // These are all equivalent
-      generate[Int]("""{"type": "int", "gauss": true}""").take(10) shouldBe GaussDefault
-      generate[Int]("""{"type": "int", "random" : false, "gauss": true}""").take(10) shouldBe GaussDefault
+      generate[Int]("""{"type": "int", "faker": "gauss"}""").take(10) shouldBe GaussDefault
       generate[Int]("""{"type": "int", "mean" : 0}""").take(10) shouldBe GaussDefault
       generate[Int]("""{"type": "int", "mean" : 0.0}""").take(10) shouldBe GaussDefault
       generate[Int]("""{"type": "int", "mean" : "0"}""").take(10) shouldBe GaussDefault
       generate[Int]("""{"type": "int", "mean" : "0.0"}""").take(10) shouldBe GaussDefault
       generate[Int]("""{"type": "int", "stddev" : 100}""").take(10) shouldBe GaussDefault
+      generate[Int]("""{"type": "int", "stddev" : "100"}""").take(10) shouldBe GaussDefault
       generate[Int]("""{"type": "int", "stddev" : 100.0}""").take(10) shouldBe GaussDefault
       generate[Int]("""{"type": "int", "stddev" : "100.0"}""").take(10) shouldBe GaussDefault
-      generate[Int]("""{"type": "int", "gauss": {}}""").take(10) shouldBe GaussDefault
-      generate[Int]("""{"type": "int", "mean": 0, "gauss": {"stddev": 100}}""").take(10) shouldBe GaussDefault
+      generate[Int]("""{"type": "int", "mean": 0, "faker": {"stddev": 100}}""").take(10) shouldBe GaussDefault
     }
 
     it(
       "should generate numbers centered around 100, with 95% of the values between `80` and `120`, with possible negatives"
     ) {
       // Note that it is *extremely* unlikely that a value outside 10 standard deviations would ever occur.
-      generate[Int]("""{"type": "int", "gauss": {"mean": 100, "stddev": 10}}""").take(10) shouldBe Seq(108, 90, 120,
-        107, 109, 83, 99, 101, 96, 93)
+      generate[Int]("""{"type": "int", "mean": 100, "stddev": 10}""").take(10) shouldBe Gauss100_10
+      generate[Int]("""{"type": "int", "mean": 100, "faker": {"stddev": 10}}""").take(10) shouldBe Gauss100_10
+      generate[Int]("""{"type": "int", "stddev": 10, "faker": {"mean": 100}}""").take(10) shouldBe Gauss100_10
+      generate[Int]("""{"type": "int", "faker": {"mean": 100, "stddev": 10}}""").take(10) shouldBe Gauss100_10
     }
+
     it(
       "should generate numbers centered around 100, with 95% of the values between `80` and `120`, guaranteed no negatives"
     ) {
       // But here it is impossible
-      generate[Int]("""{"type": "int", "min": 0, "gauss": {"mean": 100, "stddev": 10}}""").take(10) shouldBe Seq(108,
-        90, 120, 107, 109, 83, 99, 101, 96, 93)
+      generate[Int]("""{"type": "int", "min": 0, "faker": {"mean": 100, "stddev": 10}}""").take(10) shouldBe Gauss100_10
     }
     it("should apply a filter to only return numbers greater than the mean") {
-      generate[Int]("""{"type": "int", "min": 100, "gauss": {"mean": 100, "stddev": 10}}""").take(10) shouldBe Seq(108,
+      generate[Int]("""{"type": "int", "min": 100, "faker": {"mean": 100, "stddev": 10}}""").take(10) shouldBe Seq(108,
         120, 107, 109, 101, 100, 105, 102, 114, 102)
       // Be careful about setting a valid interval that is unlikely to have a generated number.  This next example
       // requires generated values to be 5 standard deviations from the main, so only one out of every million

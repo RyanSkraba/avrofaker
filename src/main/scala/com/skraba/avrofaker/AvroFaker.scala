@@ -26,6 +26,8 @@ import scala.util.{Random, Try}
   */
 object AvroFaker {
 
+  val ArgFaker: String = "faker"
+
   val StrategyRandom: String = "random"
   val StrategyGauss: String = "gauss"
 
@@ -49,13 +51,25 @@ object AvroFaker {
       case Schema.Type.FIXED   => FixedGenerator(schema, rnd = rnd)
       case Schema.Type.STRING  => StringGenerator(schema, rnd = rnd)
       case Schema.Type.BYTES   => BytesGenerator(schema, rnd = rnd)
-      case Schema.Type.INT     => IntGenerator(schema, rnd = rnd)
-      case Schema.Type.LONG    => LongGenerator(schema, rnd = rnd)
+      case Schema.Type.INT     => IntFaker(getArgs(schema), Map.empty, schema, rnd = rnd)
+      case Schema.Type.LONG    => LongFaker(getArgs(schema), Map.empty, schema, rnd = rnd)
       case Schema.Type.FLOAT   => FloatGenerator(schema, rnd = rnd)
       case Schema.Type.DOUBLE  => DoubleGenerator(schema, rnd = rnd)
       case Schema.Type.BOOLEAN => BooleanGenerator(schema, rnd = rnd)
       case Schema.Type.NULL    => NullGenerator(schema)
     }
+  }
+
+  def getArgs(in: Schema): Map[String, Any] = {
+    def adapt(in: Any): Any = {
+      in match {
+        case schema: Schema           => adapt(schema.getObjectProps)
+        case map: java.util.Map[_, _] => map.asScala.map { case (key, value) => key.toString -> adapt(value) }.toMap
+        case array: java.util.Collection[_] => array.asScala.map(adapt)
+        case other                          => other
+      }
+    }
+    adapt(in).asInstanceOf[Map[String, Any]]
   }
 
   /** An adapter that turns a schema and its annotations into a partial function. */
@@ -152,10 +166,11 @@ case class RecordGenerator(schema: Schema, rnd: Random = new Random()) extends A
   */
 case class EnumGenerator(schema: Schema, rnd: Random = new Random()) extends AvroFaker[String] {
   private val symbols = schema.getEnumSymbols.asScala.toSeq
-  private val indexFn = IntGenerator(
+  private val indexFn = IntFaker(
+    getArgs(schema),
+    dflts = Map(ArgMin -> 0, ArgMax -> symbols.size),
     schema,
-    rnd = rnd,
-    dflts = Map(ArgMin -> 0, ArgMax -> symbols.size)
+    rnd = rnd
   )
   def apply(): String = symbols(indexFn())
 }
@@ -256,41 +271,7 @@ case class BytesGenerator(schema: Schema, rnd: Random = new Random()) extends Av
   def apply(): Array[Byte] = rnd.nextBytes(5 + rnd.nextInt(5))
 }
 
-/** An INT schema generates an increasing sequence starting from zero, with the same strategies as [[LongGenerator]] but
-  * constrained to Int values.
-  *
-  * @param schema
-  *   a schema of type INT
-  * @param rnd
-  *   random number generator (for reproducibility if desired)
-  */
-case class IntGenerator(
-    schema: Schema,
-    rnd: Random = new Random(),
-    dflts: PartialFunction[String, Any] = PartialFunction.empty
-) extends AvroFaker[Int] {
-  private val intDflts = dflts.orElse(Map(ArgMax -> Int.MaxValue, ArgMin -> Int.MinValue, ArgStddev -> 100L))
-
-  private val fn = {
-    if (schema.propsContainsKey(StrategyRandom) && schema.getObjectProp(StrategyRandom) != false) {
-      LongRandomGenerator(localArgs(schema, StrategyRandom, intDflts), rnd)
-    } else if (schema.propsContainsKey(StrategyGauss) && schema.getObjectProp(StrategyGauss) != false) { () =>
-      DoubleGaussGenerator(localArgs(schema, StrategyGauss, intDflts), rnd)().toLong
-    } else if (schema.propsContainsKey(ArgMean) || schema.propsContainsKey(ArgStddev)) { () =>
-      DoubleGaussGenerator(localArgs(schema, dflts = intDflts), rnd)().toLong
-    } else if (schema.propsContainsKey(ArgStart) || schema.propsContainsKey(ArgStep))
-      SequenceFaker[Long](localArgs(schema, dflts = dflts.orElse(Map(ArgMax -> Int.MaxValue, ArgMin -> 0))))
-    else
-      LongRandomGenerator(localArgs(schema, dflts = intDflts), rnd)
-  }
-
-  def apply(): Int = fn().toInt
-}
-
-/** Generates LONG values with a specific strategy given by the schema properties.
-  *
-  *   - If [[AvroFaker.PropStart]], [[AvroFaker.PropEnd]] or [[AvroFaker.PropStep]] are specified, use a sequence
-  *   - Otherwise generate a random number between [[AvroFaker.PropMin]] and [[AvroFaker.PropMax]]
+/** Generates INT values with a specific strategy given by the schema properties.
   *
   * @param schema
   *   a schema of type INT or LONG. Although the generated data are Long values, they will be constrained to Integer
@@ -298,34 +279,59 @@ case class IntGenerator(
   * @param rnd
   *   random number generator (for reproducibility if desired)
   */
-case class LongGenerator(
-    schema: Schema,
-    rnd: Random = new Random(),
-    dflts: PartialFunction[String, Any] = PartialFunction.empty
-) extends AvroFaker[Long] {
-  private val longDflts = dflts.orElse(Map(ArgMax -> Long.MaxValue, ArgMin -> Long.MinValue, ArgStddev -> 100L))
+case class IntFaker(cfg: Map[String, Any], dflts: Map[String, Any] = Map.empty, schema: Schema, rnd: Random)
+    extends AvroFaker[Int] {
 
-  private val fn = {
-    if (schema.propsContainsKey(StrategyRandom) && schema.getObjectProp(StrategyRandom) != false) {
-      LongRandomGenerator(localArgs(schema, StrategyRandom, longDflts), rnd)
-    } else if (schema.propsContainsKey(StrategyGauss) && schema.getObjectProp(StrategyGauss) != false) { () =>
-      DoubleGaussGenerator(localArgs(schema, StrategyGauss, longDflts), rnd)().toLong
-    } else if (schema.propsContainsKey(ArgMean) || schema.propsContainsKey(ArgStddev)) { () =>
-      DoubleGaussGenerator(localArgs(schema, dflts = longDflts), rnd)().toLong
-    } else if (schema.propsContainsKey(ArgStart) || schema.propsContainsKey(ArgStep))
-      SequenceFaker[Long](localArgs(schema, dflts = longDflts))
-    else
-      LongRandomGenerator(localArgs(schema, dflts = longDflts), rnd)
+  private val intDflts = Map(ArgMax -> Int.MaxValue, ArgMin -> Int.MinValue) ++ dflts
+
+  private val fn: () => Long = LongFaker(cfg, intDflts, schema, rnd);
+
+  def apply(): Int = fn().toInt
+}
+
+/** Generates LONG values with a specific strategy given by the schema properties.
+  *
+  * @param schema
+  *   a schema of type INT or LONG. Although the generated data are Long values, they will be constrained to Integer
+  *   minimums and maximums if this is an INT schema.
+  * @param rnd
+  *   random number generator (for reproducibility if desired)
+  */
+case class LongFaker(cfg: Map[String, Any], dflts: Map[String, Any] = Map.empty, schema: Schema, rnd: Random)
+    extends AvroFaker[Long] {
+
+  private val longDflts = Map(ArgMax -> Long.MaxValue, ArgMin -> Long.MinValue, ArgStddev -> 100L) ++ dflts
+
+  private val fn: () => Long = {
+    cfg.get(ArgFaker) match {
+      case Some(StrategyRandom) =>
+        LongRandomFaker(longDflts ++ cfg, rnd)
+      case Some(StrategyGauss) => () => DoubleGaussFaker(longDflts ++ cfg, rnd)().toLong
+      case Some(m: Map[_, _]) =>
+        LongFaker(cfg.removed(ArgFaker) ++ m.asInstanceOf[Map[String, Any]], dflts, schema, rnd)
+      case Some(xs: Seq[Any]) => ???
+      case _ if cfg.contains(ArgMean) || cfg.contains(ArgStddev) =>
+        () => DoubleGaussFaker(longDflts ++ cfg, rnd)().toLong
+      case _ if cfg.contains(ArgStart) || cfg.contains(ArgStep) =>
+        SequenceFaker[Long](localArgs(schema, dflts = longDflts ++ Map(ArgMin -> 0)))
+      case _ =>
+        LongRandomFaker(longDflts ++ cfg, rnd)
+    }
   }
 
   def apply(): Long = fn()
 }
 
-/** Generates a random long in an interval. */
-private[this] case class LongRandomGenerator(args: PartialFunction[String, Any], rnd: Random = new Random())
-    extends AvroFaker[Long] {
-  val min: () => Long = () => args.lift(ArgMin).map(_.toString.toLong).getOrElse(Long.MinValue)
-  val max: () => Long = () => args.lift(ArgMax).map(_.toString.toLong).getOrElse(Long.MaxValue)
+/** A faker that generates random numbers uniformly from an interval.
+  *
+  * It can be configured with the following arguments:
+  *
+  *   - `min`: The lower bound (inclusive) of the sequence (Default: 0).
+  *   - `max`: The upper bound (exclusive) of the sequence (No default, this must be supplied).
+  */
+private[this] case class LongRandomFaker(args: Map[String, Any], rnd: Random = new Random()) extends AvroFaker[Long] {
+  val min: () => Long = () => args.get(ArgMin).map(_.toString.toDouble.toLong).getOrElse(Long.MinValue)
+  val max: () => Long = () => args.get(ArgMax).map(_.toString.toDouble.toLong).getOrElse(Long.MaxValue)
   def apply(): Long = rnd.between(min(), max())
 }
 
@@ -341,12 +347,12 @@ private[this] case class LongRandomGenerator(args: PartialFunction[String, Any],
   * Values outside the `min` and `max` are discarded. Be careful, if your valid interval is rarely drawn from a gaussian
   * distribution, this generator might be very slow to generate value.
   */
-private[this] case class DoubleGaussGenerator(args: PartialFunction[String, Any], rnd: Random = new Random())
+private[this] case class DoubleGaussFaker(args: Map[String, Any], rnd: Random = new Random())
     extends AvroFaker[Double] {
-  val mean: () => Double = () => args.lift(ArgMean).map(_.toString.toDouble).getOrElse(0.0d)
-  val stddev: () => Double = () => args.lift(ArgStddev).map(_.toString.toDouble).getOrElse(1.0d)
-  val min: () => Double = () => args.lift(ArgMin).map(_.toString.toDouble).getOrElse(Double.NegativeInfinity)
-  val max: () => Double = () => args.lift(ArgMax).map(_.toString.toDouble).getOrElse(Double.PositiveInfinity)
+  val mean: () => Double = () => args.get(ArgMean).map(_.toString.toDouble).getOrElse(0.0d)
+  val stddev: () => Double = () => args.get(ArgStddev).map(_.toString.toDouble).getOrElse(1.0d)
+  val min: () => Double = () => args.get(ArgMin).map(_.toString.toDouble).getOrElse(Double.NegativeInfinity)
+  val max: () => Double = () => args.get(ArgMax).map(_.toString.toDouble).getOrElse(Double.PositiveInfinity)
   def apply(): Double = {
     lazy val vMin = min()
     lazy val vMax = max()
