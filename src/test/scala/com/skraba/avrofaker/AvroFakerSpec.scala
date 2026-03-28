@@ -35,8 +35,9 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     *   A LazyList stream of fake values.
     */
   def generate[T](schema: Schema, props: (String, Any)*)(implicit ct: ClassTag[T]): LazyList[T] = {
+    val ctx = FakerContext(new Random(0))
     val gen = AvroFaker(applyProps(schema, props: _*), new Random(0L))
-    LazyList.continually(gen()).flatMap {
+    LazyList.continually(gen(ctx)).flatMap {
       case good: T => Some(good)
       case bad     =>
         // This will fail here
@@ -236,20 +237,22 @@ generate[Int]("""{"type": "int", "value": [1,2,3,4,5], "index": "mean"}`    | Al
         .noDefault()
         .requiredString("name")
         .endRecord()
+      val ctx = FakerContext(new Random(0))
       val gen = AvroFaker(schema, new Random(0L))
-      gen.apply() shouldBe new GenericRecordBuilder(schema).set("id", 0).set("name", "CCzLNHBFHu").build()
-      gen.apply() shouldBe new GenericRecordBuilder(schema).set("id", 1).set("name", "RvbI1iI19W").build()
-      gen.apply() shouldBe new GenericRecordBuilder(schema).set("id", 2).set("name", "jGGR8UNWut").build()
+      gen.apply(ctx) shouldBe new GenericRecordBuilder(schema).set("id", 0).set("name", "CCzLNHBFHu").build()
+      gen.apply(ctx) shouldBe new GenericRecordBuilder(schema).set("id", 1).set("name", "RvbI1iI19W").build()
+      gen.apply(ctx) shouldBe new GenericRecordBuilder(schema).set("id", 2).set("name", "jGGR8UNWut").build()
     }
   }
 
   describe("Generating Avro ENUM data") {
     it("should pick symbols randomly") {
       val schema = SchemaBuilder.enumeration("Example").symbols("A", "B", "C", "D", "E")
+      val ctx = FakerContext(new Random(0))
       val gen = AvroFaker(schema, new Random(0L))
-      gen.apply() shouldBe "A"
-      gen.apply() shouldBe "D"
-      gen.apply() shouldBe "E"
+      gen.apply(ctx) shouldBe "A"
+      gen.apply(ctx) shouldBe "D"
+      gen.apply(ctx) shouldBe "E"
     }
 
     it("should pick symbols sequentially") {
@@ -269,53 +272,58 @@ generate[Int]("""{"type": "int", "value": [1,2,3,4,5], "index": "mean"}`    | Al
   describe("Generating Avro ARRAY data") {
     it("should create arrays of its element type") {
       val schema = SchemaBuilder.array().items().stringBuilder().endString()
+      val ctx = FakerContext(new Random(0))
       val gen = AvroFaker(schema, new Random(0L))
-      gen.apply() shouldBe Array("CzLNHBFHuR", "vbI1iI19Wj")
-      gen.apply() shouldBe Array("GR8UNWutFR", "ZvWebpA5WH")
-      gen.apply() shouldBe Array("yqts0coJXQ", "qPyuxbr589", "wyJzS2SuiH", "rAOB2RuvBb")
+      gen(ctx) shouldBe Array("CzLNHBFHuR", "vbI1iI19Wj")
+      gen(ctx) shouldBe Array("GR8UNWutFR", "ZvWebpA5WH")
+      gen(ctx) shouldBe Array("yqts0coJXQ", "qPyuxbr589", "wyJzS2SuiH", "rAOB2RuvBb")
     }
   }
 
   describe("Generating Avro MAP data") {
     it("should create maps of its value type") {
       val schema = SchemaBuilder.map().values().`type`(IntSequence)
+      val ctx = FakerContext(new Random(0))
       val gen = AvroFaker(schema, new Random(0L))
-      gen.apply() shouldBe Map("CzLNHBFHuR" -> 0, "vbI1iI19Wj" -> 1)
-      gen.apply() shouldBe Map("GR8UNWutFR" -> 2, "ZvWebpA5WH" -> 3)
-      gen.apply() shouldBe Map("yqts0coJXQ" -> 4, "qPyuxbr589" -> 5, "wyJzS2SuiH" -> 6, "rAOB2RuvBb" -> 7)
+      gen(ctx) shouldBe Map("CzLNHBFHuR" -> 0, "vbI1iI19Wj" -> 1)
+      gen(ctx) shouldBe Map("GR8UNWutFR" -> 2, "ZvWebpA5WH" -> 3)
+      gen(ctx) shouldBe Map("yqts0coJXQ" -> 4, "qPyuxbr589" -> 5, "wyJzS2SuiH" -> 6, "rAOB2RuvBb" -> 7)
     }
   }
 
   describe("Generating Avro UNION data") {
     it("should generate data from the union types with equal probability") {
+      val ctx = FakerContext(new Random(0))
       val gen = AvroFaker(Schema.createUnion(Schema.create(Schema.Type.NULL), IntSequence), new Random(0L))
-      gen() shouldBe 0
-      gen() shouldBe 1
-      Option(gen()) shouldBe None
-      gen() shouldBe 2
-      gen() shouldBe 3
-      Option(gen()) shouldBe None
-      gen() shouldBe 4
-      Option(gen()) shouldBe None
-      gen() shouldBe 5
+      gen(ctx) shouldBe 0
+      gen(ctx) shouldBe 1
+      Option(gen(ctx)) shouldBe None
+      gen(ctx) shouldBe 2
+      gen(ctx) shouldBe 3
+      Option(gen(ctx)) shouldBe None
+      gen(ctx) shouldBe 4
+      Option(gen(ctx)) shouldBe None
+      gen(ctx) shouldBe 5
     }
   }
 
   describe("Generating Avro FIXED data") {
     it("should create byte arrays by default") {
+      val ctx = FakerContext(new Random(0))
       val gen = AvroFaker(Schema.createFixed("Example", "", "", 4), new Random(0L))
-      gen() shouldBe Array(96, -76, 32, -69)
-      gen() shouldBe Array(56, 81, -39, -44)
-      gen() shouldBe Array(122, -53, -109, 61)
+      gen(ctx) shouldBe Array(96, -76, 32, -69)
+      gen(ctx) shouldBe Array(56, 81, -39, -44)
+      gen(ctx) shouldBe Array(122, -53, -109, 61)
     }
   }
 
   describe("Generating Avro STRING data") {
     it("should create ten character strings by default") {
+      val ctx = FakerContext(new Random(0))
       val gen = AvroFaker(Schema.create(Schema.Type.STRING), new Random(0L))
-      gen() shouldBe "CCzLNHBFHu"
-      gen() shouldBe "RvbI1iI19W"
-      gen() shouldBe "jGGR8UNWut"
+      gen(ctx) shouldBe "CCzLNHBFHu"
+      gen(ctx) shouldBe "RvbI1iI19W"
+      gen(ctx) shouldBe "jGGR8UNWut"
     }
 
     it("should have a configurable length") {
@@ -345,10 +353,11 @@ generate[Int]("""{"type": "int", "value": [1,2,3,4,5], "index": "mean"}`    | Al
 
   describe("Generating Avro BYTES data") {
     it("should create variable byte arrays by default") {
+      val ctx = FakerContext(new Random(0))
       val gen = AvroFaker(Schema.create(Schema.Type.BYTES), new Random(0L))
-      gen() shouldBe Array(56, 81, -39, -44, 122)
-      gen() shouldBe Array(-10, -55, 45, -93, 58, -16, 29)
-      gen() shouldBe Array(3, 37, -12, 29, 62, -70)
+      gen(ctx) shouldBe Array(56, 81, -39, -44, 122)
+      gen(ctx) shouldBe Array(-10, -55, 45, -93, 58, -16, 29)
+      gen(ctx) shouldBe Array(3, 37, -12, 29, 62, -70)
     }
   }
 
@@ -450,19 +459,21 @@ generate[Int]("""{"type": "int", "value": [1,2,3,4,5], "index": "mean"}`    | Al
 
   describe("Generating Avro BOOLEAN data") {
     it("should generate random booleans") {
+      val ctx = FakerContext(new Random(0))
       val gen = AvroFaker(Schema.create(Schema.Type.BOOLEAN), new Random(0L))
-      gen() shouldBe true
-      gen() shouldBe true
-      gen() shouldBe false
+      gen(ctx) shouldBe true
+      gen(ctx) shouldBe true
+      gen(ctx) shouldBe false
     }
   }
 
   describe("Generating Avro NULL data") {
     it("should only ever generate NULL") {
+      val ctx = FakerContext(new Random(0))
       val gen = AvroFaker(Schema.create(Schema.Type.NULL), new Random(0L))
-      Option(gen()) shouldBe None
-      Option(gen()) shouldBe None
-      Option(gen()) shouldBe None
+      Option(gen(ctx)) shouldBe None
+      Option(gen(ctx)) shouldBe None
+      Option(gen(ctx)) shouldBe None
     }
   }
 }
