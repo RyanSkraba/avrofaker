@@ -36,7 +36,7 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     */
   def generate[T](schema: Schema, props: (String, Any)*)(implicit ct: ClassTag[T]): LazyList[T] = {
     val ctx = FakerContext(new Random(0))
-    val gen = AvroFaker(applyProps(schema, props: _*), new Random(0L))
+    val gen = AvroFaker(applyProps(schema, props: _*))
     LazyList.continually(gen(ctx)).flatMap {
       case good: T => Some(good)
       case bad     =>
@@ -47,7 +47,7 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
   }
 
   def generate[T](schema: String, props: (String, Any)*)(implicit ct: ClassTag[T]): LazyList[T] = {
-    generate[T](new Schema.Parser().parse(schema), props: _*)
+    generate[T](new Schema.Parser().parse(schema), props: _*)(ct)
   }
 
   def generate[T](sType: Schema.Type, props: (String, Any)*)(implicit ct: ClassTag[T]): LazyList[T] =
@@ -59,20 +59,6 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     val RandomsDefault = Seq(-1630935619, -1483802595, -864264928)
     val RandomsNonNeg = Seq(711764125, 1302116448, 663681053)
     val RandomsByte = Seq(187, 212, 61, 155, 163, 79, 140, 29, 152, 200)
-
-    /*
-    | `"int"`                                           | Uniformly generates a random 32 bit whole number from `-2147483648` to `2147483646`.             |
-| `{"type": "int"}`                                 | :arrow_up: Avro equivalent.                                                                      |
-| `{"type": "int", "faker": "random"}`              | :arrow_up: Equivalent.                                                                           |
-| `{"type": "int", "faker": {}}`                    | :arrow_up: Equivalent, but useless                                                               |
-| `{"type": "int", "faker": {"faker": "random"}}`   | :arrow_up: Equivalent, but useless.                                                              |
-| `{"type": "int", "faker": "random", "min": 0}`    | Uniformly generates a random 32 bit whole number from 0 to `2147483646`.                         |
-| `{"type": "int", "min": 0}`                       | :arrow_up: Equivalent.                                                                           |
-| `{"type": "int", "faker": {"min": 0}}`            | :arrow_up: Equivalent.                                                                           |
-| `{"type": "int", "min": 100, faker": {"min": 0}}` | :arrow_up: Equivalent, because the `min` argument is ignored from the parent when it's supplied. |
-| `{"type": "int", "min": 0, "max": 256}`           | :Uniformly generates a number from `0` to `255`                                                  |
-
-     */
 
     it("should use the random strategy on unannotated INT schemas") {
       generate[Int](""""int"""").take(3) shouldBe RandomsDefault
@@ -118,15 +104,6 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     val GaussDefault = Seq(80, -90, 208, 76, 98, -168, -2, 11, -39, -64)
     val Gauss100_10 = Seq(108, 90, 120, 107, 109, 83, 99, 101, 96, 93)
 
-    /** | `{"type": "int", "faker": "gauss"}`                                      | Generates a bell curve of numbers centered around `0`, with 95% of the values between `-200` and `200`.                                                         |
-      * |:-------------------------------------------------------------------------|:----------------------------------------------------------------------------------------------------------------------------------------------------------------|
-      * | `{"type": "int", "mean": 0}`                                             | :arrow_up: Equivalent, implicitly choosing the **gauss** strategy.                                                                                              |
-      * | `{"type": "int", "faker": "gauss", "mean": 100, "stddev": 10}`           | Generates numbers centered around `100`, with 95% of the values between `80` and `120`. It's very unlikely but possible that a negative value could occur.      |
-      * | `{"type": "int", "faker": "gauss", "mean": 100, "stddev": 10, "min": 0}` | Generates numbers centered around `100`, with 95% of the values between `80` and `120`, guaranteeing no negative values.                                        |
-      * | `{"type": "int", "min": 0, "faker": {"stddev": 10}}`                     | Generates a bell curve of numbers centered around `0` and standard deviation of `10`, but only accepts positive values (half are thrown away).                  |
-      * | `{"type": "int", "min": 50, "faker": {"mean": 100, "stddev": 10}}`       | :warning: The same bell curve as above, but only numbers > `50`. This is 5 standard deviations from the mean; one one value out of every million will be valid. |
-      */
-
     it(
       "should generate between a bell curve of numbers centered around 0, with 95% of the values between -200 and 200"
     ) {
@@ -169,64 +146,6 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     }
   }
 
-  describe("Examples from the readme.md") {
-
-    /*
-
-| Schema                                                  | Summary                                                                                                         |
-|---------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------|
-generate[Int]("""{"type": "int", "sequence": true}`                     generate[Int]("""0`, `1`, `2`, `3`, `4`, `5` until it reaches `2147483646`, then restarts.                                      |
-generate[Int]("""{"type": "int", "step": 1}`                            | :arrow_up: Equivalent, implicitly choosing the **sequence** strategy.                                           |
-generate[Int]("""{"type": "int", "start": 10000}`                       | :arrow_up: `10000`, `10001`, `10002`, `10003`, `10004`, `10005`, implicitly choosing the **sequence** strategy. |
-generate[Int]("""{"type": "int", "step": -1, "max": 4}`                 | `3`, `2`, `1`, `0`, `3`, `2`, etc.                                                                              |
-generate[Int]("""{"type": "int", "start": 3, "max": 4, "step": 3}`      | :arrow_up: Equivalent because of the wrapped remainder, but confusing.                                          |
-generate[Int]("""{"type": "int", "sequence": {"start": 10, "max": 13}}` | `10`, `11`, `12`, `0`, `1`, `2`, etc.                                                                           |
-generate[Int]("""{"type": "int", "sequence": {"start": 10, "max": 13}}` | `10`, `11`, `12`, `0`, `1`, `2`, etc.                                                                           |
-generate[Int]("""{"type": "int", "max": 13, "sequence": {"start": 10}}` | :arrow_up: Equivalent, inheriting the `max` argument from the parent.                                           |
-     */
-    it("should work from the INT Sequences section") {}
-
-    /*
-
-| Schema                                                               | Summary                                                                                                                              |
-|----------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------|
-generate[Int]("""{"type": "int", "value": 123}`                                      | Always generates `123`.                                                                                                              |
-generate[Int]("""{"type": "int", "value": {"value": 123}}`                           | :arrow_up: Equivalent, but useless.                                                                                                  |
-generate[Int]("""{"type": "int", "value": [123, 321]}`                               | Randomly picks `123` or `321`.                                                                                                       |
-generate[Int]("""{"type": "int", "value": {"random": {"min": 0}}}`                   | **random** generating a  whole number from 0 to **2147483646**.                                                                      |
-generate[Int]("""{"type": "int", "max": 4, "value": {"start": 1, "sequence": true}}` | **sequence** generating `1`, `2`, `3`, `0`, `1`, `2`, etc.   Note that the sequence arguments are inherited up to the parent schema. |
-generate[Int]("""{"type": "int", "value": [999, {"random": {"min": 0, "max": 9}}]}`  | Picks `999` 50% of the time, and a single digit number the other 50%.                                                                |
-
-If it is a JSON array, and at the _same_ level as the `value` attribute, there exists an `index` attribute that _is_ a string, then
-
-1. The value of the `index` attribute is used to generate an integer value within the interval [`0`, array size).
- The process is identical to how a `value` attribute is processed (as a constant, a generator strategy, or an array of generator strategies),
- with an implicit `min` and `max` supplied to the strategies.
- If the result happens to be outside the interval, either `min` or `max` is used instead.
-2. The generated integer is used to pick the value in the `value` JSON array that is actually used for the generator.
-
-| Schema                                                                                | Summary                                                                                       |
-|---------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------|
-generate[Int]("""{"type": "int", "value": [123, 321, 999], "index": 0}`                               | Always generates `123`.                                                                       |
-generate[Int]("""{"type": "int", "value": [123, 321, 999], "index": -1}`                              | :arrow_up: Equivalent.                                                                        |
-generate[Int]("""{"type": "int", "value": [123, 321, 999], "index": {"step": 1}}`                     | The index is a sequence `0`,`1`,`2`,`0`,`1`, etc, so alternates `123`,`321`,`999`,`123`, etc. |
-generate[Int]("""{"type": "int", "value": [1,2,3,4,5], "index": {"gauss": {"mean": 2, "stddev": 1}}}` | Picks the numbers `1`,`2`,`3`,`4`,`5` in a rough bell curve.                                  |
-
-
-| Schema                                                      | Summary                 |
-|-------------------------------------------------------------|-------------------------|
-generate[Int]("""{"type": "int", "value": [1,2,3,4,5], "index": "sum"}`     | Always generates `15`.  |
-generate[Int]("""{"type": "int", "value": [1,2,3,4,5], "index": "product"}` | Always generates `120`. |
-generate[Int]("""{"type": "int", "value": [1,2,3,4,5], "index": "min"}`     | Always generates `1`.   |
-generate[Int]("""{"type": "int", "value": [1,2,3,4,5], "index": "max"}`     | Always generates `5`.   |
-generate[Int]("""{"type": "int", "value": [1,2,3,4,5], "index": "mean"}`    | Always generates `3`.   |
-
-     */
-
-    it("should work from the INT Value section ") {}
-
-  }
-
   describe("Generating Avro RECORD data") {
     it("should create ten character strings by default") {
       val schema = SchemaBuilder
@@ -238,7 +157,7 @@ generate[Int]("""{"type": "int", "value": [1,2,3,4,5], "index": "mean"}`    | Al
         .requiredString("name")
         .endRecord()
       val ctx = FakerContext(new Random(0))
-      val gen = AvroFaker(schema, new Random(0L))
+      val gen = AvroFaker(schema)
       gen.apply(ctx) shouldBe new GenericRecordBuilder(schema).set("id", 0).set("name", "CCzLNHBFHu").build()
       gen.apply(ctx) shouldBe new GenericRecordBuilder(schema).set("id", 1).set("name", "RvbI1iI19W").build()
       gen.apply(ctx) shouldBe new GenericRecordBuilder(schema).set("id", 2).set("name", "jGGR8UNWut").build()
@@ -249,7 +168,7 @@ generate[Int]("""{"type": "int", "value": [1,2,3,4,5], "index": "mean"}`    | Al
     it("should pick symbols randomly") {
       val schema = SchemaBuilder.enumeration("Example").symbols("A", "B", "C", "D", "E")
       val ctx = FakerContext(new Random(0))
-      val gen = AvroFaker(schema, new Random(0L))
+      val gen = AvroFaker(schema)
       gen.apply(ctx) shouldBe "A"
       gen.apply(ctx) shouldBe "D"
       gen.apply(ctx) shouldBe "E"
@@ -273,7 +192,7 @@ generate[Int]("""{"type": "int", "value": [1,2,3,4,5], "index": "mean"}`    | Al
     it("should create arrays of its element type") {
       val schema = SchemaBuilder.array().items().stringBuilder().endString()
       val ctx = FakerContext(new Random(0))
-      val gen = AvroFaker(schema, new Random(0L))
+      val gen = AvroFaker(schema)
       gen(ctx) shouldBe Array("CzLNHBFHuR", "vbI1iI19Wj")
       gen(ctx) shouldBe Array("GR8UNWutFR", "ZvWebpA5WH")
       gen(ctx) shouldBe Array("yqts0coJXQ", "qPyuxbr589", "wyJzS2SuiH", "rAOB2RuvBb")
@@ -284,7 +203,7 @@ generate[Int]("""{"type": "int", "value": [1,2,3,4,5], "index": "mean"}`    | Al
     it("should create maps of its value type") {
       val schema = SchemaBuilder.map().values().`type`(IntSequence)
       val ctx = FakerContext(new Random(0))
-      val gen = AvroFaker(schema, new Random(0L))
+      val gen = AvroFaker(schema)
       gen(ctx) shouldBe Map("CzLNHBFHuR" -> 0, "vbI1iI19Wj" -> 1)
       gen(ctx) shouldBe Map("GR8UNWutFR" -> 2, "ZvWebpA5WH" -> 3)
       gen(ctx) shouldBe Map("yqts0coJXQ" -> 4, "qPyuxbr589" -> 5, "wyJzS2SuiH" -> 6, "rAOB2RuvBb" -> 7)
@@ -294,7 +213,7 @@ generate[Int]("""{"type": "int", "value": [1,2,3,4,5], "index": "mean"}`    | Al
   describe("Generating Avro UNION data") {
     it("should generate data from the union types with equal probability") {
       val ctx = FakerContext(new Random(0))
-      val gen = AvroFaker(Schema.createUnion(Schema.create(Schema.Type.NULL), IntSequence), new Random(0L))
+      val gen = AvroFaker(Schema.createUnion(Schema.create(Schema.Type.NULL), IntSequence))
       gen(ctx) shouldBe 0
       gen(ctx) shouldBe 1
       Option(gen(ctx)) shouldBe None
@@ -310,7 +229,7 @@ generate[Int]("""{"type": "int", "value": [1,2,3,4,5], "index": "mean"}`    | Al
   describe("Generating Avro FIXED data") {
     it("should create byte arrays by default") {
       val ctx = FakerContext(new Random(0))
-      val gen = AvroFaker(Schema.createFixed("Example", "", "", 4), new Random(0L))
+      val gen = AvroFaker(Schema.createFixed("Example", "", "", 4))
       gen(ctx) shouldBe Array(96, -76, 32, -69)
       gen(ctx) shouldBe Array(56, 81, -39, -44)
       gen(ctx) shouldBe Array(122, -53, -109, 61)
@@ -320,7 +239,7 @@ generate[Int]("""{"type": "int", "value": [1,2,3,4,5], "index": "mean"}`    | Al
   describe("Generating Avro STRING data") {
     it("should create ten character strings by default") {
       val ctx = FakerContext(new Random(0))
-      val gen = AvroFaker(Schema.create(Schema.Type.STRING), new Random(0L))
+      val gen = AvroFaker(Schema.create(Schema.Type.STRING))
       gen(ctx) shouldBe "CCzLNHBFHu"
       gen(ctx) shouldBe "RvbI1iI19W"
       gen(ctx) shouldBe "jGGR8UNWut"
@@ -354,7 +273,7 @@ generate[Int]("""{"type": "int", "value": [1,2,3,4,5], "index": "mean"}`    | Al
   describe("Generating Avro BYTES data") {
     it("should create variable byte arrays by default") {
       val ctx = FakerContext(new Random(0))
-      val gen = AvroFaker(Schema.create(Schema.Type.BYTES), new Random(0L))
+      val gen = AvroFaker(Schema.create(Schema.Type.BYTES))
       gen(ctx) shouldBe Array(56, 81, -39, -44, 122)
       gen(ctx) shouldBe Array(-10, -55, 45, -93, 58, -16, 29)
       gen(ctx) shouldBe Array(3, 37, -12, 29, 62, -70)
@@ -460,7 +379,7 @@ generate[Int]("""{"type": "int", "value": [1,2,3,4,5], "index": "mean"}`    | Al
   describe("Generating Avro BOOLEAN data") {
     it("should generate random booleans") {
       val ctx = FakerContext(new Random(0))
-      val gen = AvroFaker(Schema.create(Schema.Type.BOOLEAN), new Random(0L))
+      val gen = AvroFaker(Schema.create(Schema.Type.BOOLEAN))
       gen(ctx) shouldBe true
       gen(ctx) shouldBe true
       gen(ctx) shouldBe false
@@ -470,7 +389,7 @@ generate[Int]("""{"type": "int", "value": [1,2,3,4,5], "index": "mean"}`    | Al
   describe("Generating Avro NULL data") {
     it("should only ever generate NULL") {
       val ctx = FakerContext(new Random(0))
-      val gen = AvroFaker(Schema.create(Schema.Type.NULL), new Random(0L))
+      val gen = AvroFaker(Schema.create(Schema.Type.NULL))
       Option(gen(ctx)) shouldBe None
       Option(gen(ctx)) shouldBe None
       Option(gen(ctx)) shouldBe None
