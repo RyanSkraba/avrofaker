@@ -32,6 +32,7 @@ object AvroFaker {
 
   val StrategyRandom: String = "random"
   val StrategyGauss: String = "gauss"
+  val StrategySequence: String = "sequence"
 
   val ArgMin: String = "min"
   val ArgMax: String = "max"
@@ -53,8 +54,8 @@ object AvroFaker {
       case Schema.Type.FIXED   => FixedGenerator(schema)
       case Schema.Type.STRING  => StringGenerator(schema)
       case Schema.Type.BYTES   => BytesGenerator(schema)
-      case Schema.Type.INT     => IntFaker(getArgs(schema), Map.empty, schema)
-      case Schema.Type.LONG    => LongFaker(getArgs(schema), Map.empty, schema)
+      case Schema.Type.INT     => IntFaker(getArgs(schema))
+      case Schema.Type.LONG    => LongFaker(getArgs(schema))
       case Schema.Type.FLOAT   => FloatGenerator(schema)
       case Schema.Type.DOUBLE  => DoubleGenerator(schema)
       case Schema.Type.BOOLEAN => BooleanGenerator(schema)
@@ -168,11 +169,7 @@ case class RecordGenerator(schema: Schema) extends AvroFaker[GenericRecord] {
   */
 case class EnumGenerator(schema: Schema) extends AvroFaker[String] {
   private val symbols = schema.getEnumSymbols.asScala.toSeq
-  private val indexFn = IntFaker(
-    getArgs(schema),
-    dflts = Map(ArgMin -> 0, ArgMax -> symbols.size),
-    schema
-  )
+  private val indexFn = IntFaker(getArgs(schema), dflts = Map(ArgMin -> 0, ArgMax -> symbols.size))
   def apply(ctx: FakerContext): String = symbols(indexFn(ctx))
 }
 
@@ -283,11 +280,11 @@ case class BytesGenerator(schema: Schema) extends AvroFaker[Array[Byte]] {
   * @param rnd
   *   random number generator (for reproducibility if desired)
   */
-case class IntFaker(cfg: Map[String, Any], dflts: Map[String, Any] = Map.empty, schema: Schema) extends AvroFaker[Int] {
+case class IntFaker(cfg: Map[String, Any], dflts: Map[String, Any] = Map.empty) extends AvroFaker[Int] {
 
   private val intDflts = Map(ArgMax -> Int.MaxValue, ArgMin -> Int.MinValue) ++ dflts
 
-  private val fn: FakerContext => Long = LongFaker(cfg, intDflts, schema);
+  private val fn: FakerContext => Long = LongFaker(cfg, intDflts);
 
   def apply(ctx: FakerContext): Int = fn(ctx).toInt
 }
@@ -300,25 +297,23 @@ case class IntFaker(cfg: Map[String, Any], dflts: Map[String, Any] = Map.empty, 
   * @param rnd
   *   random number generator (for reproducibility if desired)
   */
-case class LongFaker(cfg: Map[String, Any], dflts: Map[String, Any] = Map.empty, schema: Schema)
-    extends AvroFaker[Long] {
+case class LongFaker(cfg: Map[String, Any], dflts: Map[String, Any] = Map.empty) extends AvroFaker[Long] {
 
   private val longDflts = Map(ArgMax -> Long.MaxValue, ArgMin -> Long.MinValue, ArgStddev -> 100L) ++ dflts
 
   private val fn: FakerContext => Long = {
     cfg.get(ArgFaker) match {
-      case Some(StrategyRandom) =>
-        LongRandomFaker(longDflts ++ cfg)
-      case Some(StrategyGauss) => ctx => DoubleGaussFaker(longDflts ++ cfg)(ctx).toLong
+      case Some(StrategyRandom)   => LongRandomFaker(longDflts ++ cfg)
+      case Some(StrategyGauss)    => ctx => DoubleGaussFaker(longDflts ++ cfg)(ctx).toLong
+      case Some(StrategySequence) => SequenceFaker[Long](longDflts ++ Map(ArgMin -> 0) ++ cfg)
       case Some(m: Map[_, _]) =>
-        LongFaker(cfg.removed(ArgFaker) ++ m.asInstanceOf[Map[String, Any]], dflts, schema)
+        LongFaker(cfg.removed(ArgFaker) ++ m.asInstanceOf[Map[String, Any]], dflts)
       case Some(xs: Seq[Any]) => ???
       case _ if cfg.contains(ArgMean) || cfg.contains(ArgStddev) =>
         ctx => DoubleGaussFaker(longDflts ++ cfg)(ctx).toLong
       case _ if cfg.contains(ArgStart) || cfg.contains(ArgStep) =>
-        SequenceFaker[Long](localArgs(schema, dflts = longDflts ++ Map(ArgMin -> 0)))
-      case _ =>
-        LongRandomFaker(longDflts ++ cfg)
+        SequenceFaker[Long](longDflts ++ Map(ArgMin -> 0) ++ cfg)
+      case _ => LongRandomFaker(longDflts ++ cfg)
     }
   }
 
@@ -364,8 +359,8 @@ private[this] case class DoubleGaussFaker(args: Map[String, Any]) extends AvroFa
   }
 }
 
-/** A generator that generates whole numbers within an interval, moving by a step every time. When the end of the
-  * sequence is reached, it wraps around and repeats.
+/** A faker that generates whole numbers within an interval, moving by a step every time. When the end of the sequence
+  * is reached, it wraps around and repeats.
   *
   * It can be configured with the following arguments:
   *
@@ -376,26 +371,25 @@ private[this] case class DoubleGaussFaker(args: Map[String, Any]) extends AvroFa
   *   - `start`: The starting value for the sequence. (Default: depends on the step, whether it starts from the upper or
   *     lower bound.)
   */
-private[this] case class SequenceFaker[T](args: PartialFunction[String, Any])(implicit num: Numeric[T])
-    extends AvroFaker[T] {
+private[this] case class SequenceFaker[T](args: Map[String, Any])(implicit num: Numeric[T]) extends AvroFaker[T] {
   import num._
-  val min: () => T = () => args.lift(ArgMin).map(_.toString).flatMap(num.parseString).getOrElse(num.zero)
-  val max: () => T = () => args.lift(ArgMax).map(_.toString).flatMap(num.parseString).getOrElse(num.zero)
-  val step: () => T = () => args.lift(ArgStep).map(_.toString).flatMap(num.parseString).getOrElse(num.one)
-  private var next: Option[T] = args.lift(ArgStart).map(_.toString).flatMap(num.parseString)
+  val min: () => T = () => args.get(ArgMin).map(_.toString).flatMap(num.parseString).getOrElse(num.zero)
+  val max: () => T = () => args.get(ArgMax).map(_.toString).flatMap(num.parseString).getOrElse(num.zero)
+  val step: () => T = () => args.get(ArgStep).map(_.toString).flatMap(num.parseString).getOrElse(num.one)
+  private var next: Option[T] = args.get(ArgStart).map(_.toString).flatMap(num.parseString).map(_ max min() min max())
   def apply(ctx: FakerContext): T = {
     val vMin = min()
     val vMax = max()
     val vStep = step()
 
-    val generated = next.getOrElse(if (vStep < num.zero) vMax else vMin)
+    val generated = next.getOrElse(if (vStep < num.zero) vMax + vStep else vMin)
 
     next = Some(generated + vStep) // TODO: test overflow
 
     if (vStep < num.zero && next.exists(_ < vMin))
-      next = next.map(vMin - _ + vMax)
+      next = next.map(vMax - vMin + _)
     else if (vStep > num.zero && next.exists(_ >= vMax))
-      next = next.map(_ - vMax + vMin)
+      next = next.map(vMin - vMax + _)
 
     generated
   }
@@ -428,7 +422,7 @@ case class DoubleGenerator(schema: Schema) extends AvroFaker[Double] {
         stdDev = getDouble(schema, ArgStddev, 1)
       )
     else if (schema.propsContainsKey(ArgStart) || schema.propsContainsKey(ArgStep))
-      SequenceFaker[Double](localArgs(schema, dflts = Map(ArgMax -> Double.MaxValue, ArgMin -> Double.MinValue)))
+      SequenceFaker[Double](Map(ArgMax -> Double.MaxValue, ArgMin -> Double.MinValue) ++ getArgs(schema))
     else
       DoubleRandomGenerator(
         min = getDouble(schema, ArgMin, 0),

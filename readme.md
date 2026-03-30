@@ -152,7 +152,6 @@ You can explicitly set the `faker` attribute to a constant value, which supplies
 | Schema                                     | Summary                             |
 |--------------------------------------------|-------------------------------------|
 | `{"type": "int", "faker": 123}`            | Always generates `123`.             |
-| `{"type": "int", "faker": {"value": 123}}` | :arrow_up: Equivalent, but useless. |
 
 ### The **oneof** strategy for an `INT`
 

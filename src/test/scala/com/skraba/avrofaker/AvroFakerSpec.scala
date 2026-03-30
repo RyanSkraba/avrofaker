@@ -119,7 +119,6 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
       generate[Int]("""{"type": "int", "stddev" : "100.0"}""").take(10) shouldBe GaussDefault
       generate[Int]("""{"type": "int", "mean": 0, "faker": {"stddev": 100}}""").take(10) shouldBe GaussDefault
     }
-
     it(
       "should generate numbers centered around 100, with 95% of the values between `80` and `120`, with possible negatives"
     ) {
@@ -129,7 +128,6 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
       generate[Int]("""{"type": "int", "stddev": 10, "faker": {"mean": 100}}""").take(10) shouldBe Gauss100_10
       generate[Int]("""{"type": "int", "faker": {"mean": 100, "stddev": 10}}""").take(10) shouldBe Gauss100_10
     }
-
     it(
       "should generate numbers centered around 100, with 95% of the values between `80` and `120`, guaranteed no negatives"
     ) {
@@ -143,6 +141,29 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
       // requires generated values to be 5 standard deviations from the main, so only one out of every million
       // generated values will be retained.
       // generate[Int]("""{"type": "int", "max": 50, "gauss": {"mean": 100, "stddev": 10}}""").take(10)
+    }
+  }
+
+  describe("Generate INT with the sequence strategy") {
+    it("should generate a simple sequence") {
+      generate[Int]("""{"type": "int", "faker": "sequence"}""").take(10) shouldBe (0 to 9)
+      generate[Int]("""{"type": "int", "step": 1}""").take(10) shouldBe (0 to 9)
+    }
+    it("should start from a specific value") {
+      generate[Int]("""{"type": "int", "start": 10000}""").take(10) shouldBe (10000 to 10009)
+    }
+    it("should start from a specific value and step") {
+      generate[Int]("""{"type": "int", "start": 10, "step": 2}""").take(10) shouldBe (10 to 28 by 2)
+    }
+    it("should count down with a negative step") {
+      generate[Int]("""{"type": "int", "step": -1, "max": 4}""").take(10) shouldBe Seq(3, 2, 1, 0, 3, 2, 1, 0, 3, 2)
+    }
+    it("should look like a countdown down when you loop every step") {
+      generate[Int]("""{"type": "int", "start": 3, "max": 4, "step": 3}""").take(6) shouldBe Seq(3, 2, 1, 0, 3, 2)
+    }
+    it("should start from a specific value and loop") {
+      generate[Int]("""{"type": "int", "faker": {"start": 10, "max": 13}}""").take(5) shouldBe Seq(10, 11, 12, 0, 1)
+      generate[Int]("""{"type": "int", "max": 13, "faker": {"start": 10}}""").take(5) shouldBe Seq(10, 11, 12, 0, 1)
     }
   }
 
@@ -357,7 +378,7 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
 
       it("should start at the specified value at fractional values") {
         // Note that these values are all perfectly representable in floating point
-        generate(schemaType, ArgMax -> 0.5, ArgStep -> -0.25)(ct).map(_.toString.toDouble).take(10) shouldBe Seq(0.5,
+        generate(schemaType, ArgMax -> 0.75, ArgStep -> -0.25)(ct).map(_.toString.toDouble).take(10) shouldBe Seq(0.5,
           0.25, 0.0, -0.25, -0.5, -0.75, -1.0, -1.25, -1.5, -1.75)
       }
 
