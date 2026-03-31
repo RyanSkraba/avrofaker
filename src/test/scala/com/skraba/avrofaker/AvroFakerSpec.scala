@@ -95,8 +95,9 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     }
 
     for (maxValue <- Seq("256", "256.1", "256.999"))
-      it(s"should support the max value: $maxValue") {
+      it(s"should support the max value: $maxValue and \"$maxValue\"") {
         generate[Int](s"""{"type": "int", "min": 0, "max": $maxValue}""").take(10) shouldBe RandomsByte
+        generate[Int](s"""{"type": "int", "min": 0, "max": "$maxValue"}""").take(10) shouldBe RandomsByte
       }
   }
 
@@ -165,6 +166,32 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
       generate[Int]("""{"type": "int", "faker": {"start": 10, "max": 13}}""").take(5) shouldBe Seq(10, 11, 12, 0, 1)
       generate[Int]("""{"type": "int", "max": 13, "faker": {"start": 10}}""").take(5) shouldBe Seq(10, 11, 12, 0, 1)
     }
+  }
+
+  describe("Generate INT with the value strategy") {
+    it("should generate a constant value") {
+      // These are all equivalent
+      generate[Int]("""{"type": "int", "value": 123}""").take(10) shouldBe Seq.fill(10)(123)
+      generate[Int]("""{"type": "int", "faker": 123}""").take(10) shouldBe Seq.fill(10)(123)
+      generate[Int]("""{"type": "int", "faker": "value", "value": 123}""").take(10) shouldBe Seq.fill(10)(123)
+      generate[Int]("""{"type": "int", "value": 123.9}""").take(10) shouldBe Seq.fill(10)(123)
+      generate[Int]("""{"type": "int", "value": "123.1"}""").take(10) shouldBe Seq.fill(10)(123)
+    }
+
+    it("should apply the minimum and maximum to the constant value") {
+      generate[Int]("""{"type": "int", "min": 0, "value": 123}""").take(10) shouldBe Seq.fill(10)(123)
+      generate[Int]("""{"type": "int", "min": 234, "value": 123}""").take(10) shouldBe Seq.fill(10)(234)
+      generate[Int]("""{"type": "int", "max": 0, "value": 123}""").take(10) shouldBe Seq.fill(10)(0)
+      generate[Int]("""{"type": "int", "max": 234, "value": 123}""").take(10) shouldBe Seq.fill(10)(123)
+    }
+
+    for (maxValue <- Seq("256", "256.1", "256.999"))
+      it(s"should support the max and min value: $maxValue and \"$maxValue\"") {
+        generate[Int](s"""{"type": "int", "value": 999, "max": $maxValue}""").take(10) shouldBe Seq.fill(10)(256)
+        generate[Int](s"""{"type": "int", "value": 999, "max": "$maxValue"}""").take(10) shouldBe Seq.fill(10)(256)
+        generate[Int](s"""{"type": "int", "value": 123, "min": $maxValue}""").take(10) shouldBe Seq.fill(10)(256)
+        generate[Int](s"""{"type": "int", "value": 123, "min": "$maxValue"}""").take(10) shouldBe Seq.fill(10)(256)
+      }
   }
 
   describe("Generating Avro RECORD data") {

@@ -7,7 +7,7 @@ import org.apache.avro.Schema.Field
 import org.apache.avro.generic.{GenericRecord, GenericRecordBuilder}
 
 import scala.jdk.CollectionConverters._
-import scala.util.Random
+import scala.util.{Random, Try}
 
 /** The context used to generate a new data. */
 case class FakerContext(rnd: Random = new Random())
@@ -33,6 +33,7 @@ object AvroFaker {
   val StrategyRandom: String = "random"
   val StrategyGauss: String = "gauss"
   val StrategySequence: String = "sequence"
+  val StrategyValue: String = "value"
 
   val ArgMin: String = "min"
   val ArgMax: String = "max"
@@ -40,6 +41,7 @@ object AvroFaker {
   val ArgStddev: String = "stddev"
   val ArgStep: String = "step"
   val ArgStart: String = "start"
+  val ArgValue: String = "value"
 
   val PropLength: String = "length"
   val PropFaker: String = "faker"
@@ -81,15 +83,6 @@ object AvroFaker {
       override def isDefinedAt(key: String): Boolean = schema.propsContainsKey(key)
       override def apply(key: String): Any = schema.getObjectProp(key)
     }
-
-  def localArgs(
-      schema: Schema,
-      strategy: String = "",
-      dflts: PartialFunction[String, Any] = PartialFunction.empty
-  ): PartialFunction[String, Any] = (schema.getObjectProp(strategy) match {
-    case obj: java.util.Map[_, _] => obj.asScala.map { case (k, v) => (k.toString, v) }
-    case _                        => PartialFunction.empty
-  }).orElse(getPropsFn(schema)).orElse(dflts)
 
   def getLong(value: Any): () => Long = () => value.toString.toLong
 
@@ -274,50 +267,92 @@ case class BytesGenerator(schema: Schema) extends AvroFaker[Array[Byte]] {
 
 /** Generates INT values with a specific strategy given by the schema properties.
   *
-  * @param schema
-  *   a schema of type INT or LONG. Although the generated data are Long values, they will be constrained to Integer
-  *   minimums and maximums if this is an INT schema.
-  * @param rnd
-  *   random number generator (for reproducibility if desired)
+  * @param args
+  *   The annotations that have been assigned to the schema, or to the faker strategy.
+  * @param dflts
+  *   If an argument is optional and not in the configuration, the value to use.
   */
-case class IntFaker(cfg: Map[String, Any], dflts: Map[String, Any] = Map.empty) extends AvroFaker[Int] {
-
-  private val intDflts = Map(ArgMax -> Int.MaxValue, ArgMin -> Int.MinValue) ++ dflts
-
-  private val fn: FakerContext => Long = LongFaker(cfg, intDflts);
-
+case class IntFaker(args: Map[String, Any], dflts: Map[String, Any] = Map.empty) extends AvroFaker[Int] {
+  private val fn =
+    LongFaker.getFaker(args, Map(ArgMax -> Int.MaxValue, ArgMin -> Int.MinValue, ArgStddev -> 100L) ++ dflts)
   def apply(ctx: FakerContext): Int = fn(ctx).toInt
 }
 
-/** Generates LONG values with a specific strategy given by the schema properties.
+/** Generates LONG values with a specific strategy given by the configuration.
   *
-  * @param schema
-  *   a schema of type INT or LONG. Although the generated data are Long values, they will be constrained to Integer
-  *   minimums and maximums if this is an INT schema.
-  * @param rnd
-  *   random number generator (for reproducibility if desired)
+  * @param args
+  *   The annotations that have been assigned to the schema, or to the faker strategy.
   */
-case class LongFaker(cfg: Map[String, Any], dflts: Map[String, Any] = Map.empty) extends AvroFaker[Long] {
+case class LongFaker(args: Map[String, Any]) extends AvroFaker[Long] {
+  private val fn = LongFaker.getFaker(args, Map(ArgMax -> Long.MaxValue, ArgMin -> Long.MinValue, ArgStddev -> 100L))
+  def apply(ctx: FakerContext): Long = fn(ctx)
+}
 
-  private val longDflts = Map(ArgMax -> Long.MaxValue, ArgMin -> Long.MinValue, ArgStddev -> 100L) ++ dflts
+object LongFaker {
 
-  private val fn: FakerContext => Long = {
-    cfg.get(ArgFaker) match {
-      case Some(StrategyRandom)   => LongRandomFaker(longDflts ++ cfg)
-      case Some(StrategyGauss)    => ctx => DoubleGaussFaker(longDflts ++ cfg)(ctx).toLong
-      case Some(StrategySequence) => SequenceFaker[Long](longDflts ++ Map(ArgMin -> 0) ++ cfg)
-      case Some(m: Map[_, _]) =>
-        LongFaker(cfg.removed(ArgFaker) ++ m.asInstanceOf[Map[String, Any]], dflts)
-      case Some(xs: Seq[Any]) => ???
-      case _ if cfg.contains(ArgMean) || cfg.contains(ArgStddev) =>
-        ctx => DoubleGaussFaker(longDflts ++ cfg)(ctx).toLong
-      case _ if cfg.contains(ArgStart) || cfg.contains(ArgStep) =>
-        SequenceFaker[Long](longDflts ++ Map(ArgMin -> 0) ++ cfg)
-      case _ => LongRandomFaker(longDflts ++ cfg)
+  def getLong(args: Map[String, Any], dflts: Map[String, Any] = Map.empty, key: String): FakerContext => Long = {
+    // Get the key from the args or defaults
+    val value: Option[Any] = args.get(key).orElse(dflts.get(key))
+    // If it's a constant, create a generator that only returns that constant.
+    value.flatMap {
+      case b: Byte   => Some(b.toLong)
+      case s: Short  => Some(s.toLong)
+      case i: Int    => Some(i.toLong)
+      case l: Long   => Some(l)
+      case f: Float  => Some(f.toLong)
+      case d: Double => Some(d.toLong)
+      case s: String => Some(Try(s.toLong).orElse(Try(s.toDouble.toLong)).get)
+      case _         => None
+    } match {
+      case Some(constant: Long) if key == ArgMin || key == ArgMax =>
+        // Ignore existing when setting the min or max
+        ConstantFaker(constant)
+      case Some(l: Long) =>
+        // Otherwise, a constant value might need to have the bounds applied.
+        val minFn = getLong(args, dflts, ArgMin)
+        val maxFn = getLong(args, dflts, ArgMax)
+        (minFn, maxFn) match {
+          case (ConstantFaker(min), ConstantFaker(max)) => ConstantFaker(l min max max min)
+          case _                                        => ctx: FakerContext => l min maxFn(ctx) max minFn(ctx)
+        }
+      case None =>
+        value match {
+          case Some(m: Map[_, _]) => getFaker(args.removed(key) ++ m.asInstanceOf[Map[String, Any]], dflts)
+          case Some(xs: Iterable[_]) =>
+            val fns = xs.map(v => getFaker(args ++ Map(key -> v), dflts, key)).toSeq
+            ctx => fns(ctx.rnd.nextInt(fns.size))(ctx)
+          case Some(unknown) => throw new IllegalArgumentException(s"Unknown argument content: $unknown")
+          case None          => LongRandomFaker(dflts ++ args)
+        }
     }
   }
 
-  def apply(ctx: FakerContext): Long = fn(ctx)
+  def getFaker(
+      args: Map[String, Any],
+      dflts: Map[String, Any] = Map.empty,
+      key: String = ArgFaker
+  ): FakerContext => Long = {
+    args.get(key) match {
+      case Some(StrategyRandom)   => LongRandomFaker(dflts ++ args)
+      case Some(StrategyGauss)    => ctx => DoubleGaussFaker(dflts ++ args)(ctx).toLong
+      case Some(StrategySequence) => SequenceFaker[Long](dflts ++ Map(ArgMin -> 0) ++ args)
+      case Some(StrategyValue)    => getFaker(args, dflts, ArgValue)
+      case None if args.contains(ArgMean) || args.contains(ArgStddev) =>
+        getFaker(args ++ Map(key -> StrategyGauss), dflts, key)
+      case None if args.contains(ArgStart) || args.contains(ArgStep) =>
+        getFaker(args ++ Map(key -> StrategySequence), dflts, key)
+      case None if args.contains(ArgValue) =>
+        getFaker(args, dflts, ArgValue)
+        getFaker(args ++ Map(key -> StrategyValue), dflts, key)
+      case _ =>
+        getLong(args, dflts, key)
+    }
+  }
+}
+
+/** A */
+private[this] case class ConstantFaker[T](constant: T) extends AvroFaker[T] {
+  def apply(ctx: FakerContext): T = constant
 }
 
 /** A faker that generates random numbers uniformly from an interval.
@@ -328,9 +363,9 @@ case class LongFaker(cfg: Map[String, Any], dflts: Map[String, Any] = Map.empty)
   *   - `max`: The upper bound (exclusive) of the sequence (No default, this must be supplied).
   */
 private[this] case class LongRandomFaker(args: Map[String, Any]) extends AvroFaker[Long] {
-  val min: () => Long = () => args.get(ArgMin).map(_.toString.toDouble.toLong).getOrElse(Long.MinValue)
-  val max: () => Long = () => args.get(ArgMax).map(_.toString.toDouble.toLong).getOrElse(Long.MaxValue)
-  def apply(ctx: FakerContext): Long = ctx.rnd.between(min(), max())
+  val min: FakerContext => Long = LongFaker.getLong(args, key = ArgMin)
+  val max: FakerContext => Long = LongFaker.getLong(args, key = ArgMax)
+  def apply(ctx: FakerContext): Long = ctx.rnd.between(min(ctx), max(ctx))
 }
 
 /** A faker that generates numbers along the Gauss distribution to have a bell curve nicely centered around a median.
@@ -445,29 +480,6 @@ case class DoubleGenerator(schema: Schema) extends AvroFaker[Double] {
   /** Generates a double along the gaussian distribution */
   private[this] case class DoubleGaussGenerator(mean: () => Double, stdDev: () => Double) extends AvroFaker[Double] {
     def apply(ctx: FakerContext): Double = ctx.rnd.nextGaussian() * stdDev() + mean()
-  }
-
-  /** A generator that generates whole numbers from `start` (inclusive) to `end` (exclusive), counting by `step`. When
-    * the end of the sequence is reached, it repeats.
-    * @param start
-    *   The first number in the sequence
-    * @param end
-    *   The last number in the sequence (exclusive)
-    * @param step
-    *   The step to count by
-    */
-  private[this] case class DoubleSequenceGenerator(start: () => Double, end: () => Double, step: () => Double)
-      extends AvroFaker[Double] {
-    private var current: Double = start()
-    def apply(ctx: FakerContext): Double = {
-      lazy val lzyStart = start()
-      lazy val lzyEnd = end()
-      lazy val lzyStep = step()
-      val next = current
-      current = current + lzyStep
-      if (current >= lzyEnd) current = lzyStart + current - lzyEnd
-      next
-    }
   }
 }
 

@@ -144,14 +144,24 @@ A zero `step`, of course, starts and stays at `min` forever.
 | `{"type": "int", "faker": {"start": 10, "max": 13}}` | `10`, `11`, `12`, `0`, `1`, `2`, etc.                                                                           |
 | `{"type": "int", "max": 13, "faker": {"start": 10}}` | :arrow_up: Equivalent, inheriting the `max` argument from the parent.                                           |
 
-### Setting a constant value for an `INT`.
+### The **value** strategy with `INT`
 
-You can explicitly set the `faker` attribute to a constant value, which supplies the datum to return.
-- If the value is a JSON number or a JSON string that contains a number, that number is always returned (simply truncated if floating point).
+You can generate a constant value with the **value** strategy by setting the `faker` attribute to `value`, or by setting the `faker` attribute to a JSON number.
 
-| Schema                                     | Summary                             |
-|--------------------------------------------|-------------------------------------|
-| `{"type": "int", "faker": 123}`            | Always generates `123`.             |
+This strategy has the following arguments (bolded arguments auto-select the strategy if no other has been explicitly selected):
+
+- `min` to specify the lower bounds (inclusive) of the generated value (default: 0).
+- `max` to specify the upper bounds (exclusive) of the generated value (default: 2147483647 for `INT`).
+- **`value`** to specify the constant value to return (default: 0).  If this is out of the interval, it's moved into the interval.
+
+| Schema                                             | Summary                                                |
+|----------------------------------------------------|--------------------------------------------------------|
+| `{"type": "int", "value": 123}`                    | Always generates `123`.                                |
+| `{"type": "int", "faker": 123}`                    | :arrow_up: Equivalent explicit shortcut.               |
+| `{"type": "int", "faker": "value", "value": 123}`  | :arrow_up: Equivalent, explicit stategy with argument. |
+| `{"type": "int", "value": 123.9}`                  | Truncates floating point numbers to generate `123`.    |
+| `{"type": "int", "value": "123.1"}`                | And converts strings to generate `123`.                |
+| `{"type": "int", "min": "999.9", value": "123.1"}` | Applies bounds to generate `999`.                      |
 
 ### The **oneof** strategy for an `INT`
 
