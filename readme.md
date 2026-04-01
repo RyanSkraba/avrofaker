@@ -179,7 +179,7 @@ This strategy has the following arguments (bolded arguments auto-select the stra
 | Schema                                                                                | Summary                                                                                       |
 |---------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------|
 | `{"type": "int", "faker": [123, 234, 345]}`                                           | Randomly picks `123`, `234` or `345`.                                                         |
-| `{"type": "int", "oneof": [123, 321]}`                                                | :arrow_up: Equivalent, but implicitly selects the strategy.                                   |
+| `{"type": "int", "oneof": [123, 234, 345]}`                                           | :arrow_up: Equivalent, but implicitly selects the strategy.                                   |
 | `{"type": "int", "faker": [999, {"min": 0, "max": 9}]}`                               | Picks `999` 50% of the time, and a single digit number the other 50%.                         |
 | `{"type": "int", "oneof": [123, 321, 999], "index": 0}`                               | Always generates `123`.                                                                       |
 | `{"type": "int", "oneof": [123, 321, 999], "index": -1}`                              | :arrow_up: Equivalent, the implicit `min` on the index forces it to `0`.                      |

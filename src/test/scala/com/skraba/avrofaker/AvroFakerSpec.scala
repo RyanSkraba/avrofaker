@@ -194,6 +194,41 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
       }
   }
 
+  describe("Generate INT with the oneof strategy") {
+    it("should pick a random value between 123, 234 and 345") {
+      // These are all equivalent
+      val expected = Seq(123, 234, 234, 345, 345, 345, 345, 123, 123, 345)
+      generate[Int]("""{"type": "int", "faker": [123, 234, 345]}""").take(10) shouldBe expected
+      generate[Int]("""{"type": "int", "oneof": [123, 234, 345]}""").take(10) shouldBe expected
+    }
+
+    it("should pick randomly between a single digit and 999") {
+      generate[Int]("""{"type": "int", "faker": [999, {"min": 0, "max": 9}]}""").take(10) shouldBe Seq(7, 999, 8, 999,
+        3, 2, 999, 999, 999, 8)
+    }
+
+    it("should always generate 123") {
+      val expected = Seq.fill(10)(123)
+      generate[Int]("""{"type": "int", "oneof": [123, 321, 999], "index": 0}""").take(10) shouldBe expected
+      generate[Int]("""{"type": "int", "oneof": 123}""").take(10) shouldBe expected
+      generate[Int]("""{"type": "int", "oneof": [123, 321, 999], "index": -1}""").take(10) shouldBe expected
+    }
+
+    it("should cycle through the elements") {
+      generate[Int]("""{"type": "int", "oneof": [123, 321, 999], "index": {"step": 1}}""").take(10) shouldBe
+        Seq(123, 321, 999, 123, 321, 999, 123, 321, 999, 123)
+    }
+
+    it("should pick a gaussian distribution of elements") {
+      generate[Int]("""{"type": "int", "oneof": [1,2,3,4,5], "index": {"mean": 2.5, "stddev": 1}}""")
+        .take(1000)
+        .groupBy(identity)
+        .view
+        .mapValues(_.size)
+        .toMap shouldBe Map(1 -> 82, 2 -> 209, 3 -> 392, 4 -> 255, 5 -> 62)
+    }
+  }
+
   describe("Generating Avro RECORD data") {
     it("should create ten character strings by default") {
       val schema = SchemaBuilder

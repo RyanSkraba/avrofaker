@@ -34,6 +34,7 @@ object AvroFaker {
   val StrategyGauss: String = "gauss"
   val StrategySequence: String = "sequence"
   val StrategyValue: String = "value"
+  val StrategyOneOf: String = "oneof"
 
   val ArgMin: String = "min"
   val ArgMax: String = "max"
@@ -42,6 +43,8 @@ object AvroFaker {
   val ArgStep: String = "step"
   val ArgStart: String = "start"
   val ArgValue: String = "value"
+  val ArgOneOf: String = "oneof"
+  val ArgIndex: String = "index"
 
   val PropLength: String = "length"
   val PropFaker: String = "faker"
@@ -274,7 +277,7 @@ case class BytesGenerator(schema: Schema) extends AvroFaker[Array[Byte]] {
   */
 case class IntFaker(args: Map[String, Any], dflts: Map[String, Any] = Map.empty) extends AvroFaker[Int] {
   private val fn =
-    LongFaker.getFaker(args, Map(ArgMax -> Int.MaxValue, ArgMin -> Int.MinValue, ArgStddev -> 100L) ++ dflts)
+    LongFaker.getFaker(args, Map(ArgMax -> Int.MaxValue, ArgMin -> Int.MinValue, ArgStddev -> 100L) ++ dflts, ArgFaker)
   def apply(ctx: FakerContext): Int = fn(ctx).toInt
 }
 
@@ -284,7 +287,8 @@ case class IntFaker(args: Map[String, Any], dflts: Map[String, Any] = Map.empty)
   *   The annotations that have been assigned to the schema, or to the faker strategy.
   */
 case class LongFaker(args: Map[String, Any]) extends AvroFaker[Long] {
-  private val fn = LongFaker.getFaker(args, Map(ArgMax -> Long.MaxValue, ArgMin -> Long.MinValue, ArgStddev -> 100L))
+  private val fn =
+    LongFaker.getFaker(args, Map(ArgMax -> Long.MaxValue, ArgMin -> Long.MinValue, ArgStddev -> 100L), ArgFaker)
   def apply(ctx: FakerContext): Long = fn(ctx)
 }
 
@@ -317,12 +321,10 @@ object LongFaker {
         }
       case None =>
         value match {
-          case Some(m: Map[_, _]) => getFaker(args.removed(key) ++ m.asInstanceOf[Map[String, Any]], dflts)
-          case Some(xs: Iterable[_]) =>
-            val fns = xs.map(v => getFaker(args ++ Map(key -> v), dflts, key)).toSeq
-            ctx => fns(ctx.rnd.nextInt(fns.size))(ctx)
-          case Some(unknown) => throw new IllegalArgumentException(s"Unknown argument content: $unknown")
-          case None          => LongRandomFaker(dflts ++ args)
+          case Some(m: Map[_, _])    => getFaker(args.removed(key) ++ m.asInstanceOf[Map[String, Any]], dflts, key)
+          case Some(xs: Iterable[_]) => RandomOneOfFaker(xs.map(v => getFaker(args ++ Map(key -> v), dflts, key)).toSeq)
+          case Some(unknown)         => throw new IllegalArgumentException(s"Unknown argument content: $unknown")
+          case None                  => LongRandomFaker(dflts ++ args)
         }
     }
   }
@@ -330,27 +332,33 @@ object LongFaker {
   def getFaker(
       args: Map[String, Any],
       dflts: Map[String, Any] = Map.empty,
-      key: String = ArgFaker
+      key: String
   ): FakerContext => Long = {
     args.get(key) match {
       case Some(StrategyRandom)   => LongRandomFaker(dflts ++ args)
       case Some(StrategyGauss)    => ctx => DoubleGaussFaker(dflts ++ args)(ctx).toLong
       case Some(StrategySequence) => SequenceFaker[Long](dflts ++ Map(ArgMin -> 0) ++ args)
       case Some(StrategyValue)    => getFaker(args, dflts, ArgValue)
+      case Some(StrategyOneOf) =>
+        getFaker(args, dflts, ArgOneOf) match {
+          case RandomOneOfFaker(fns) => OneOfFaker(args, fns)
+          case other                 => other
+        }
       case None if args.contains(ArgMean) || args.contains(ArgStddev) =>
         getFaker(args ++ Map(key -> StrategyGauss), dflts, key)
       case None if args.contains(ArgStart) || args.contains(ArgStep) =>
         getFaker(args ++ Map(key -> StrategySequence), dflts, key)
       case None if args.contains(ArgValue) =>
-        getFaker(args, dflts, ArgValue)
         getFaker(args ++ Map(key -> StrategyValue), dflts, key)
+      case None if args.contains(ArgOneOf) =>
+        getFaker(args ++ Map(key -> StrategyOneOf), dflts, key)
       case _ =>
         getLong(args, dflts, key)
     }
   }
 }
 
-/** A */
+/** A faker that returns a single constant value. */
 private[this] case class ConstantFaker[T](constant: T) extends AvroFaker[T] {
   def apply(ctx: FakerContext): T = constant
 }
@@ -428,6 +436,17 @@ private[this] case class SequenceFaker[T](args: Map[String, Any])(implicit num: 
 
     generated
   }
+}
+
+/** A faker that picks a random strategy from a list. */
+private[this] case class RandomOneOfFaker[T](fns: Seq[FakerContext => T]) extends AvroFaker[T] {
+  def apply(ctx: FakerContext): T = fns(ctx.rnd.nextInt(fns.size))(ctx)
+}
+
+/** A faker that picks a strategy from a list using an index. */
+private[this] case class OneOfFaker[T](args: Map[String, Any], fns: Seq[FakerContext => T]) extends AvroFaker[T] {
+  val index: FakerContext => Long = LongFaker.getLong(args ++ Map(ArgMin -> 0, ArgMax -> fns.size), key = ArgIndex)
+  def apply(ctx: FakerContext): T = fns((index(ctx) max 0 min (fns.size - 1)).toInt)(ctx)
 }
 
 /** A FLOAT schema generates a random floating point number
