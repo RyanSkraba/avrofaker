@@ -229,6 +229,25 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     }
   }
 
+  describe("Generate INT with aggregate strategies") {
+    it("should sum values from multiple strategies") {
+      generate[Int]("""{"type": "int", "sumof": [1,2,3,4,5], "faker": "sumof"}""").take(10) shouldBe Seq.fill(10)(15)
+      generate[Int]("""{"type": "int", "sumof": [1,2,3,4,5]}""").take(10) shouldBe Seq.fill(10)(15)
+    }
+    it("should multiply values from multiple strategies") {
+      generate[Int]("""{"type": "int", "productof": [1,2,3,4,5]}""").take(10) shouldBe Seq.fill(10)(120)
+    }
+    it("should find the minimum from multiple strategies") {
+      generate[Int]("""{"type": "int", "minof": [1,2,3,4,5]}""").take(10) shouldBe Seq.fill(10)(1)
+    }
+    it("should find the maximum from multiple strategies") {
+      generate[Int]("""{"type": "int", "maxof": [1,2,3,4,5]}""").take(10) shouldBe Seq.fill(10)(5)
+    }
+    it("should find the average from multiple strategies") {
+      generate[Int]("""{"type": "int", "meanof": [1,2,3,4,5]}""").take(10) shouldBe Seq.fill(10)(3)
+    }
+  }
+
   describe("Generating Avro RECORD data") {
     it("should create ten character strings by default") {
       val schema = SchemaBuilder

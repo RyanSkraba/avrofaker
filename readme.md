@@ -190,21 +190,21 @@ This strategy has the following arguments (bolded arguments auto-select the stra
 
 The following strategies work like **oneof** (without the `index` argument).  They each have an argument that is the same as their strategy name, but applies to all of the values in the JSON array.
 
-- **sum** uses every element of the array is used to generate an integer and the sum is returned.  
+- **sumof** uses every element of the array is used to generate an integer and the sum is returned.  
   Be careful about inheriting `min` and `max`, since they apply to *each* generated integer separately.
-- **product** uses every element of the array is used to generate an integer and their product is returned.
-- **min** uses every element of the array is used to generate an integer and the minimum is returned.
-- **max** uses every element of the array is used to generate an integer and the maximum is returned.
-- **mean** uses every element of the array is used to generate an integer and the average is returned.
+- **productof** uses every element of the array is used to generate an integer and their product is returned.
+- **minof** uses every element of the array is used to generate an integer and the minimum is returned.
+- **maxof** uses every element of the array is used to generate an integer and the maximum is returned.
+- **meanof** uses every element of the array is used to generate an integer and the average is returned.
 
-| Schema                                                | Summary                                                    |
-|-------------------------------------------------------|------------------------------------------------------------|
-| `{"type": "int", "sum": [1,2,3,4,5]}`                 | Always generates `15`.                                     |
-| `{"type": "int", "sum": [1,2,3,4,5]}, "faker": "sum"` | :arrow_up: Equivalent but explicitly selects the strategy. |
-| `{"type": "int", "product": [1,2,3,4,5]}`             | Always generates `120`.                                    |
-| `{"type": "int", "min": [1,2,3,4,5]}`                 | Always generates `1`.                                      |
-| `{"type": "int", "max": [1,2,3,4,5]}`                 | Always generates `5`.                                      |
-| `{"type": "int", "mean": [1,2,3,4,5]}`                | Always generates `3`.                                      |
+| Schema                                                    | Summary                                                    |
+|-----------------------------------------------------------|------------------------------------------------------------|
+| `{"type": "int", "sumof": [1,2,3,4,5]}`                   | Always generates `15`.                                     |
+| `{"type": "int", "sumof": [1,2,3,4,5]}, "faker": "sumof"` | :arrow_up: Equivalent but explicitly selects the strategy. |
+| `{"type": "int", "productof": [1,2,3,4,5]}`               | Always generates `120`.                                    |
+| `{"type": "int", "minof": [1,2,3,4,5]}`                   | Always generates `1`.                                      |
+| `{"type": "int", "maxof": [1,2,3,4,5]}`                   | Always generates `5`.                                      |
+| `{"type": "int", "meanof": [1,2,3,4,5]}`                  | Always generates `3`.                                      |
 
 Generating `LONG`, `FLOAT` and `DOUBLE` data
 ------------------------------------------------------------------------------

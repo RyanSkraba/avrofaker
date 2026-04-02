@@ -33,8 +33,15 @@ object AvroFaker {
   val StrategyRandom: String = "random"
   val StrategyGauss: String = "gauss"
   val StrategySequence: String = "sequence"
+
+  // These are both strategies and arguments
   val StrategyValue: String = "value"
   val StrategyOneOf: String = "oneof"
+  val StrategySumOf: String = "sumof"
+  val StrategyProductOf: String = "productof"
+  val StrategyMinOf: String = "minof"
+  val StrategyMaxOf: String = "maxof"
+  val StrategyMeanOf: String = "meanof"
 
   val ArgMin: String = "min"
   val ArgMax: String = "max"
@@ -42,8 +49,6 @@ object AvroFaker {
   val ArgStddev: String = "stddev"
   val ArgStep: String = "step"
   val ArgStart: String = "start"
-  val ArgValue: String = "value"
-  val ArgOneOf: String = "oneof"
   val ArgIndex: String = "index"
 
   val PropLength: String = "length"
@@ -338,20 +343,55 @@ object LongFaker {
       case Some(StrategyRandom)   => LongRandomFaker(dflts ++ args)
       case Some(StrategyGauss)    => ctx => DoubleGaussFaker(dflts ++ args)(ctx).toLong
       case Some(StrategySequence) => SequenceFaker[Long](dflts ++ Map(ArgMin -> 0) ++ args)
-      case Some(StrategyValue)    => getFaker(args, dflts, ArgValue)
+      case Some(StrategyValue)    => getFaker(args, dflts, StrategyValue)
       case Some(StrategyOneOf) =>
-        getFaker(args, dflts, ArgOneOf) match {
+        getFaker(args, dflts, StrategyOneOf) match {
           case RandomOneOfFaker(fns) => OneOfFaker(args, fns)
+          case other                 => other
+        }
+      case Some(StrategySumOf) =>
+        getFaker(args, dflts, StrategySumOf) match {
+          case RandomOneOfFaker(fns) => SumOfFaker(fns)
+          case other                 => other
+        }
+      case Some(StrategyProductOf) =>
+        getFaker(args, dflts, StrategyProductOf) match {
+          case RandomOneOfFaker(fns) => ProductOfFaker(fns)
+          case other                 => other
+        }
+      case Some(StrategyMinOf) =>
+        getFaker(args, dflts, StrategyMinOf) match {
+          case RandomOneOfFaker(fns) => MinOfFaker(fns)
+          case other                 => other
+        }
+      case Some(StrategyMaxOf) =>
+        getFaker(args, dflts, StrategyMaxOf) match {
+          case RandomOneOfFaker(fns) => MaxOfFaker(fns)
+          case other                 => other
+        }
+      case Some(StrategyMeanOf) =>
+        getFaker(args, dflts, StrategyMeanOf) match {
+          case RandomOneOfFaker(fns) => MeanOfFaker(fns)
           case other                 => other
         }
       case None if args.contains(ArgMean) || args.contains(ArgStddev) =>
         getFaker(args ++ Map(key -> StrategyGauss), dflts, key)
       case None if args.contains(ArgStart) || args.contains(ArgStep) =>
         getFaker(args ++ Map(key -> StrategySequence), dflts, key)
-      case None if args.contains(ArgValue) =>
+      case None if args.contains(StrategyValue) =>
         getFaker(args ++ Map(key -> StrategyValue), dflts, key)
-      case None if args.contains(ArgOneOf) =>
+      case None if args.contains(StrategyOneOf) =>
         getFaker(args ++ Map(key -> StrategyOneOf), dflts, key)
+      case None if args.contains(StrategySumOf) =>
+        getFaker(args ++ Map(key -> StrategySumOf), dflts, key)
+      case None if args.contains(StrategyProductOf) =>
+        getFaker(args ++ Map(key -> StrategyProductOf), dflts, key)
+      case None if args.contains(StrategyMinOf) =>
+        getFaker(args ++ Map(key -> StrategyMinOf), dflts, key)
+      case None if args.contains(StrategyMaxOf) =>
+        getFaker(args ++ Map(key -> StrategyMaxOf), dflts, key)
+      case None if args.contains(StrategyMeanOf) =>
+        getFaker(args ++ Map(key -> StrategyMeanOf), dflts, key)
       case _ =>
         getLong(args, dflts, key)
     }
@@ -447,6 +487,39 @@ private[this] case class RandomOneOfFaker[T](fns: Seq[FakerContext => T]) extend
 private[this] case class OneOfFaker[T](args: Map[String, Any], fns: Seq[FakerContext => T]) extends AvroFaker[T] {
   val index: FakerContext => Long = LongFaker.getLong(args ++ Map(ArgMin -> 0, ArgMax -> fns.size), key = ArgIndex)
   def apply(ctx: FakerContext): T = fns((index(ctx) max 0 min (fns.size - 1)).toInt)(ctx)
+}
+
+/** A faker that sums from its list of strategies */
+private[this] case class SumOfFaker[T](fns: Seq[FakerContext => T])(implicit num: Numeric[T]) extends AvroFaker[T] {
+  def apply(ctx: FakerContext): T = fns.map(_.apply(ctx)).sum
+}
+
+/** A faker that creates a product from its list of strategies */
+private[this] case class ProductOfFaker[T](fns: Seq[FakerContext => T])(implicit num: Numeric[T]) extends AvroFaker[T] {
+  def apply(ctx: FakerContext): T = fns.map(_.apply(ctx)).product
+}
+
+/** A faker that finds the minimum from its list of strategies */
+private[this] case class MinOfFaker[T](fns: Seq[FakerContext => T])(implicit num: Numeric[T]) extends AvroFaker[T] {
+  def apply(ctx: FakerContext): T = fns.map(_.apply(ctx)).min
+}
+
+/** A faker that finds the maximum from its list of strategies */
+private[this] case class MaxOfFaker[T](fns: Seq[FakerContext => T])(implicit num: Numeric[T]) extends AvroFaker[T] {
+  def apply(ctx: FakerContext): T = fns.map(_.apply(ctx)).max
+}
+
+/** A faker that finds the mean from its list of strategies */
+private[this] case class MeanOfFaker[T](fns: Seq[FakerContext => T])(implicit num: Numeric[T]) extends AvroFaker[T] {
+  def apply(ctx: FakerContext): T = num match {
+    case frac: Fractional[_] =>
+      import frac._
+      fns.map(_.apply(ctx)).sum / frac.fromInt(fns.size)
+    case int: Integral[_] =>
+      import int._
+      fns.map(_.apply(ctx)).sum / int.fromInt(fns.size)
+    case _ => throw new IllegalArgumentException("Unsupported numeric type")
+  }
 }
 
 /** A FLOAT schema generates a random floating point number
