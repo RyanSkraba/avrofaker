@@ -66,8 +66,8 @@ object AvroFaker {
       case Schema.Type.BYTES   => BytesGenerator(schema)
       case Schema.Type.INT     => IntFaker(getArgs(schema))
       case Schema.Type.LONG    => LongFaker(getArgs(schema))
-      case Schema.Type.FLOAT   => FloatGenerator(schema)
-      case Schema.Type.DOUBLE  => DoubleGenerator(schema)
+      case Schema.Type.FLOAT   => FloatFaker(getArgs(schema))
+      case Schema.Type.DOUBLE  => DoubleFaker(getArgs(schema))
       case Schema.Type.BOOLEAN => BooleanGenerator(schema)
       case Schema.Type.NULL    => NullGenerator(schema)
     }
@@ -84,13 +84,6 @@ object AvroFaker {
     }
     adapt(in).asInstanceOf[Map[String, Any]]
   }
-
-  /** An adapter that turns a schema and its annotations into a partial function. */
-  def getPropsFn(schema: Schema): PartialFunction[String, Any] =
-    new PartialFunction[String, Any]() {
-      override def isDefinedAt(key: String): Boolean = schema.propsContainsKey(key)
-      override def apply(key: String): Any = schema.getObjectProp(key)
-    }
 
   def getLong(value: Any): () => Long = () => value.toString.toLong
 
@@ -522,57 +515,147 @@ private[this] case class MeanOfFaker[T](fns: Seq[FakerContext => T])(implicit nu
   }
 }
 
-/** A FLOAT schema generates a random floating point number
+/** Generates FLOAT values with a specific strategy given by the schema properties.
   *
-  * @param schema
-  *   a schema of type FLOAT
-  * @param rnd
-  *   random number generator (for reproducibility if desired)
+  * @param args
+  *   The annotations that have been assigned to the schema, or to the faker strategy.
   */
-case class FloatGenerator(schema: Schema) extends AvroFaker[Float] {
-  private val internalGen = DoubleGenerator(schema)
-  def apply(ctx: FakerContext): Float = internalGen(ctx).toFloat
+case class FloatFaker(args: Map[String, Any]) extends AvroFaker[Float] {
+  private val fn =
+    DoubleFaker.getFaker(args, Map(ArgMax -> Float.PositiveInfinity, ArgMin -> Float.NegativeInfinity), key = ArgFaker)
+  def apply(ctx: FakerContext): Float = fn(ctx).toFloat
 }
 
-/** A DOUBLE schema generates a random floating point number
+/** Generates DOUBLE values with a specific strategy given by the configuration.
   *
-  * @param schema
-  *   a schema of type DOUBLE
-  * @param rnd
-  *   random number generator (for reproducibility if desired)
+  * @param args
+  *   The annotations that have been assigned to the schema, or to the faker strategy.
   */
-case class DoubleGenerator(schema: Schema) extends AvroFaker[Double] {
-  private val fn =
-    if (schema.propsContainsKey(ArgMean) || schema.propsContainsKey(ArgStddev))
-      DoubleGaussGenerator(
-        mean = getDouble(schema, ArgMean, 0),
-        stdDev = getDouble(schema, ArgStddev, 1)
-      )
-    else if (schema.propsContainsKey(ArgStart) || schema.propsContainsKey(ArgStep))
-      SequenceFaker[Double](Map(ArgMax -> Double.MaxValue, ArgMin -> Double.MinValue) ++ getArgs(schema))
-    else
-      DoubleRandomGenerator(
-        min = getDouble(schema, ArgMin, 0),
-        max = getDouble(schema, ArgMax, 1)
-      )
-
+case class DoubleFaker(args: Map[String, Any]) extends AvroFaker[Double] {
+  private val fn = DoubleFaker.getFaker(
+    args,
+    Map(ArgMax -> Double.PositiveInfinity, ArgMin -> Double.NegativeInfinity),
+    key = ArgFaker
+  )
   def apply(ctx: FakerContext): Double = fn(ctx)
+}
 
-  /** Generates a random double
-    *
-    * @param min
-    *   The smallest number to be generated, or the lower limit.
-    * @param max
-    *   The upper limit (exclusive)
-    */
-  private[this] case class DoubleRandomGenerator(min: () => Double, max: () => Double) extends AvroFaker[Double] {
-    def apply(ctx: FakerContext): Double = ctx.rnd.between(min(), max())
+object DoubleFaker {
+
+  def getDouble(args: Map[String, Any], dflts: Map[String, Any] = Map.empty, key: String): FakerContext => Double = {
+    // Get the key from the args or defaults
+    val value: Option[Any] = args.get(key).orElse(dflts.get(key))
+    // If it's a constant, create a generator that only returns that constant.
+    value.flatMap {
+      case b: Byte   => Some(b.toDouble)
+      case s: Short  => Some(s.toDouble)
+      case i: Int    => Some(i.toDouble)
+      case l: Long   => Some(l.toDouble)
+      case f: Float  => Some(f.toDouble)
+      case d: Double => Some(d)
+      case s: String => Some(s.toDouble)
+      case _         => None
+    } match {
+      case Some(constant: Double) if key == ArgMin || key == ArgMax =>
+        // Ignore existing when setting the min or max
+        ConstantFaker(constant)
+      case Some(l: Double) =>
+        // Otherwise, a constant value might need to have the bounds applied.
+        val minFn = getDouble(args, dflts, ArgMin)
+        val maxFn = getDouble(args, dflts, ArgMax)
+        (minFn, maxFn) match {
+          case (ConstantFaker(min), ConstantFaker(max)) => ConstantFaker(l min max max min)
+          case _                                        => ctx: FakerContext => l min maxFn(ctx) max minFn(ctx)
+        }
+      case None =>
+        value match {
+          case Some(m: Map[_, _])    => getFaker(args.removed(key) ++ m.asInstanceOf[Map[String, Any]], dflts, key)
+          case Some(xs: Iterable[_]) => RandomOneOfFaker(xs.map(v => getFaker(args ++ Map(key -> v), dflts, key)).toSeq)
+          case Some(unknown)         => throw new IllegalArgumentException(s"Unknown argument content: $unknown")
+          case None                  => DoubleRandomFaker(args)
+        }
+    }
   }
 
-  /** Generates a double along the gaussian distribution */
-  private[this] case class DoubleGaussGenerator(mean: () => Double, stdDev: () => Double) extends AvroFaker[Double] {
-    def apply(ctx: FakerContext): Double = ctx.rnd.nextGaussian() * stdDev() + mean()
+  def getFaker(
+      args: Map[String, Any],
+      dflts: Map[String, Any] = Map.empty,
+      key: String
+  ): FakerContext => Double = {
+    args.get(key) match {
+      case Some(StrategyRandom) => DoubleRandomFaker(args)
+      case Some(StrategyGauss)  => ctx => DoubleGaussFaker(dflts ++ args)(ctx)
+      case Some(StrategySequence) =>
+        val extra =
+          if (args.contains(ArgMin) || args.contains(ArgMin)) Map.empty
+          else Map(ArgMin -> Double.NegativeInfinity)
+        SequenceFaker[Double](dflts ++ extra ++ args)
+      case Some(StrategyValue) => getFaker(args, dflts, StrategyValue)
+      case Some(StrategyOneOf) =>
+        getFaker(args, dflts, StrategyOneOf) match {
+          case RandomOneOfFaker(fns) => OneOfFaker(args, fns)
+          case other                 => other
+        }
+      case Some(StrategySumOf) =>
+        getFaker(args, dflts, StrategySumOf) match {
+          case RandomOneOfFaker(fns) => SumOfFaker(fns)
+          case other                 => other
+        }
+      case Some(StrategyProductOf) =>
+        getFaker(args, dflts, StrategyProductOf) match {
+          case RandomOneOfFaker(fns) => ProductOfFaker(fns)
+          case other                 => other
+        }
+      case Some(StrategyMinOf) =>
+        getFaker(args, dflts, StrategyMinOf) match {
+          case RandomOneOfFaker(fns) => MinOfFaker(fns)
+          case other                 => other
+        }
+      case Some(StrategyMaxOf) =>
+        getFaker(args, dflts, StrategyMaxOf) match {
+          case RandomOneOfFaker(fns) => MaxOfFaker(fns)
+          case other                 => other
+        }
+      case Some(StrategyMeanOf) =>
+        getFaker(args, dflts, StrategyMeanOf) match {
+          case RandomOneOfFaker(fns) => MeanOfFaker(fns)
+          case other                 => other
+        }
+      case None if args.contains(ArgMean) || args.contains(ArgStddev) =>
+        getFaker(args ++ Map(key -> StrategyGauss), dflts, key)
+      case None if args.contains(ArgStart) || args.contains(ArgStep) =>
+        getFaker(args ++ Map(key -> StrategySequence), dflts, key)
+      case None if args.contains(StrategyValue) =>
+        getFaker(args ++ Map(key -> StrategyValue), dflts, key)
+      case None if args.contains(StrategyOneOf) =>
+        getFaker(args ++ Map(key -> StrategyOneOf), dflts, key)
+      case None if args.contains(StrategySumOf) =>
+        getFaker(args ++ Map(key -> StrategySumOf), dflts, key)
+      case None if args.contains(StrategyProductOf) =>
+        getFaker(args ++ Map(key -> StrategyProductOf), dflts, key)
+      case None if args.contains(StrategyMinOf) =>
+        getFaker(args ++ Map(key -> StrategyMinOf), dflts, key)
+      case None if args.contains(StrategyMaxOf) =>
+        getFaker(args ++ Map(key -> StrategyMaxOf), dflts, key)
+      case None if args.contains(StrategyMeanOf) =>
+        getFaker(args ++ Map(key -> StrategyMeanOf), dflts, key)
+      case _ =>
+        getDouble(args, dflts, key)
+    }
   }
+}
+
+/** A faker that generates random numbers uniformly from an interval.
+  *
+  * It can be configured with the following arguments:
+  *
+  *   - `min`: The lower bound (inclusive) of the sequence (Default: 0).
+  *   - `max`: The upper bound (exclusive) of the sequence (No default, this must be supplied).
+  */
+private[this] case class DoubleRandomFaker(args: Map[String, Any]) extends AvroFaker[Double] {
+  val min: FakerContext => Double = DoubleFaker.getDouble(args, Map(ArgMin -> 0.0), key = ArgMin)
+  val max: FakerContext => Double = DoubleFaker.getDouble(args, Map(ArgMax -> 1.0), key = ArgMax)
+  def apply(ctx: FakerContext): Double = ctx.rnd.between(min(ctx), max(ctx))
 }
 
 /** A BOOLEAN schema generates random true/false.

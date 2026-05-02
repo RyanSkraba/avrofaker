@@ -447,7 +447,7 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
         gen(2) shouldBe 2.080920790428163 +- precision
       }
 
-      it("should start at the specified value") {
+      it("should start at the minimum") {
         generate(schemaType, ArgMin -> 10, ArgStep -> 1)(ct).map(_.toString.toDouble).take(10) shouldBe Seq(10d, 11d,
           12d, 13d, 14d, 15d, 16d, 17d, 18d, 19d)
       }
