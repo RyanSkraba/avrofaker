@@ -348,13 +348,13 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     }
 
     it("should have a configurable length") {
-      generate[String](Schema.Type.STRING, PropLength -> 5)
+      generate[String](Schema.Type.STRING, ArgLength -> 5)
         .take(5) shouldBe Seq("CCzLN", "HBFHu", "RvbI1", "iI19W", "jGGR8")
     }
 
     /** Generate a list from a faker expression. */
     def genFakeString(expression: String): LazyList[String] =
-      generate[String](Schema.Type.STRING, PropFaker -> expression)
+      generate[String](Schema.Type.STRING, ArgExpression -> expression)
 
     it("should create faker data") {
       // Name examples
