@@ -157,14 +157,17 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
       generate[Int]("""{"type": "int", "start": 10, "step": 2}""").take(10) shouldBe (10 to 28 by 2)
     }
     it("should count down with a negative step") {
-      generate[Int]("""{"type": "int", "step": -1, "max": 4}""").take(10) shouldBe Seq(3, 2, 1, 0, 3, 2, 1, 0, 3, 2)
+      generate[Int]("""{"type": "int", "step": -1, "min": 0, "max": 4}""").take(6) shouldBe Seq(3, 2, 1, 0, 3, 2)
     }
     it("should look like a countdown down when you loop every step") {
-      generate[Int]("""{"type": "int", "start": 3, "max": 4, "step": 3}""").take(6) shouldBe Seq(3, 2, 1, 0, 3, 2)
+      generate[Int]("""{"type": "int", "start": 3, "min": 0, "max": 4, "step": 3}""").take(6) shouldBe Seq(3, 2, 1, 0,
+        3, 2)
     }
     it("should start from a specific value and loop") {
-      generate[Int]("""{"type": "int", "faker": {"start": 10, "max": 13}}""").take(5) shouldBe Seq(10, 11, 12, 0, 1)
-      generate[Int]("""{"type": "int", "max": 13, "faker": {"start": 10}}""").take(5) shouldBe Seq(10, 11, 12, 0, 1)
+      generate[Int]("""{"type": "int", "min": 0,  "faker": {"start": 10, "max": 13}}""").take(5) shouldBe Seq(10, 11,
+        12, 0, 1)
+      generate[Int]("""{"type": "int", "min": 0, "max": 13, "faker": {"start": 10}}""").take(5) shouldBe Seq(10, 11, 12,
+        0, 1)
     }
   }
 
@@ -225,7 +228,7 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
         .groupBy(identity)
         .view
         .mapValues(_.size)
-        .toMap shouldBe Map(1 -> 82, 2 -> 209, 3 -> 392, 4 -> 255, 5 -> 62)
+        .toMap shouldBe Map(1 -> 86, 2 -> 207, 3 -> 386, 4 -> 251, 5 -> 70)
     }
   }
 
@@ -390,8 +393,8 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
       }
 
       it("should start at the specified value") {
-        generate(schemaType, ArgMin -> 10, ArgStep -> 1)(ct).take(10) shouldBe Seq(10, 11, 12, 13, 14, 15, 16, 17, 18,
-          19)
+        generate(schemaType, ArgMin -> "10", ArgStep -> "1")(ct).take(10) shouldBe Seq(10, 11, 12, 13, 14, 15, 16, 17,
+          18, 19)
       }
 
       it("should rotate before reaching the end") {

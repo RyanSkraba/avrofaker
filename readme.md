@@ -120,11 +120,11 @@ This generates a sequence of whole numbers with an equal step between them.
 
 This strategy has the following arguments (bolded arguments auto-select the strategy if no other has been explicitly selected):
 
-- `min` to specify the lower bounds (inclusive) of the generated value (default: 0).
-- `max` to specify the upper bounds (exclusive) of the generated value (default: 2147483647 for `INT`).  
+- `min` to specify the lower bounds (inclusive) of the generated value (default: -2147483648).
+- `max` to specify the upper bounds (exclusive) of the generated value (default: 2147483647).  
 - **`step`** to specify the distance between generated sequential numbers (default: 1).
-- **`start`** to specify the starting value for the sequence (default: `min` for constant or increasing sequences, but `max` for decreasing sequences).
-  If this value is outside the intervale [`min`, `max`), then it is ignored and the default is used.
+- **`start`** to specify the starting value for the sequence. If this value is outside the intervale [`min`, `max`), then it is ignored and the default is used.
+  - (default: `min` if explicitly specified, otherwise `0` for constant or increasing sequences, and `max` for decreasing sequences).
 
 If the `step` is zero or positive, the sequence starts generating at the `min` value and monotonically grows by that value every time.
 When it would pass the `max` value, the sequence restarts at the beginning.
@@ -134,15 +134,16 @@ If the `step` is negative, the sequence starts generating at the `max` value, et
 
 A zero `step`, of course, starts and stays at `min` forever.
 
-| Schema                                               | Summary                                                                                                         |
-|------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------|
-| `{"type": "int", "faker": "sequence"}`               | `0`, `1`, `2`, `3`, `4`, `5` until it reaches `2147483646`, then restarts.                                      |
-| `{"type": "int", "step": 1}`                         | :arrow_up: Equivalent, implicitly choosing the **sequence** strategy.                                           |
-| `{"type": "int", "start": 10000}`                    | :arrow_up: `10000`, `10001`, `10002`, `10003`, `10004`, `10005`, implicitly choosing the **sequence** strategy. |
-| `{"type": "int", "step": -1, "max": 4}`              | `3`, `2`, `1`, `0`, `3`, `2`, etc.                                                                              |
-| `{"type": "int", "start": 3, "max": 4, "step": 3}`   | :arrow_up: Equivalent because of the wrapped remainder, but confusing.                                          |
-| `{"type": "int", "faker": {"start": 10, "max": 13}}` | `10`, `11`, `12`, `0`, `1`, `2`, etc.                                                                           |
-| `{"type": "int", "max": 13, "faker": {"start": 10}}` | :arrow_up: Equivalent, inheriting the `max` argument from the parent.                                           |
+| Schema                                                       | Summary                                                                                                         |
+|--------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------|
+| `{"type": "int", "faker": "sequence"}`                       | `0`, `1`, `2`, `3`, `4`, `5` until it reaches `2147483646`, then restarts.                                      |
+| `{"type": "int", "step": 1}`                                 | :arrow_up: Equivalent, implicitly choosing the **sequence** strategy.                                           |
+| `{"type": "int", "start": 10000}`                            | :arrow_up: `10000`, `10001`, `10002`, `10003`, `10004`, `10005`, implicitly choosing the **sequence** strategy. |
+| `{"type": "int", "step": -1, max": 4}`                       | `3`, `2`, `1`, `0`, `-1`, `-2`, etc.                                                                            |
+| `{"type": "int", "step": -1, "min": 0, max": 4}`             | `3`, `2`, `1`, `0`, `3`, `2`, etc.                                                                              |
+| `{"type": "int", "start": 3, "min": 0, "max": 4, "step": 3}` | :arrow_up: Equivalent because of the wrapped remainder, but confusing.                                          |
+| `{"type": "int", "faker": {"start": 10, "max": 13}}`         | `10`, `11`, `12`, `0`, `1`, `2`, etc.                                                                           |
+| `{"type": "int", "max": 13, "faker": {"start": 10}}`         | :arrow_up: Equivalent, inheriting the `max` argument from the parent.                                           |
 
 ### The **value** strategy with `INT`
 
