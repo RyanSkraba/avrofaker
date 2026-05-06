@@ -60,7 +60,7 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     val RandomsNonNeg = Seq(711764125, 1302116448, 663681053)
     val RandomsByte = Seq(187, 212, 61, 155, 163, 79, 140, 29, 152, 200)
 
-    it("should use the random strategy on unannotated INT schemas") {
+    it("should use the random strategy on unannotated schemas") {
       generate[Int](""""int"""").take(3) shouldBe RandomsDefault
       generate[Int]("""{"type": "int"}""").take(3) shouldBe RandomsDefault
     }
@@ -98,6 +98,52 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
       it(s"should support the max value: $maxValue and \"$maxValue\"") {
         generate[Int](s"""{"type": "int", "min": 0, "max": $maxValue}""").take(10) shouldBe RandomsByte
         generate[Int](s"""{"type": "int", "min": 0, "max": "$maxValue"}""").take(10) shouldBe RandomsByte
+      }
+  }
+
+  describe("Generate LONG with the random strategy") {
+    val RandomsDefault = Seq(-4962768465676381896L, 4437113781045784766L, -6688467811848818630L)
+    val RandomsNonNeg = Seq(1340999404015745395L, 4053417136674644310L, 8448822068277548669L)
+    val RandomsByte = Seq(187, 212, 61, 155, 163, 79, 140, 29, 152, 200)
+
+    it("should use the random strategy on unannotated schemas") {
+      generate[Long](""""long"""").take(3) shouldBe RandomsDefault
+      generate[Long]("""{"type": "long"}""").take(3) shouldBe RandomsDefault
+    }
+
+    it("should generate a random Int when the random strategy is explicitly set") {
+      generate[Long]("""{"type": "long", "faker": "random"}""").take(3) shouldBe RandomsDefault
+      generate[Long]("""{"type": "long", "faker": {"faker": "random"}}""").take(3) shouldBe RandomsDefault
+    }
+
+    it("should generate a random Int when the random strategy is unset") {
+      generate[Long]("""{"type": "long", "faker": {}}""").take(3) shouldBe RandomsDefault
+    }
+
+    it("should allow configuring the random strategy with a minimum") {
+      generate[Long]("""{"type": "long", "min": 0, "faker": "random"}""").take(3) shouldBe RandomsNonNeg
+      generate[Long]("""{"type": "long", "faker": {"min": 0}}""").take(3) shouldBe RandomsNonNeg
+    }
+
+    it("should implicitly configure the random strategy from the schema annotations") {
+      generate[Long]("""{"type": "long", "min": 0}""").take(3) shouldBe RandomsNonNeg
+    }
+
+    it("should override arguments from the schema annotations") {
+      generate[Long]("""{"type": "long", "min": 100, "faker": {"min": 0}}""").take(3) shouldBe RandomsNonNeg
+    }
+
+    it("should be configurable by the min and the max") {
+      generate[Long]("""{"type": "long", "min": 0, "max": 256}""").take(10) shouldBe RandomsByte
+      generate[Long]("""{"type": "long", "faker": {"min": 0, "max": 256}}""").take(10) shouldBe RandomsByte
+      generate[Long]("""{"type": "long", "min": 0, "faker": {"max": 256}}""").take(10) shouldBe RandomsByte
+      generate[Long]("""{"type": "long", "min": 100, "faker": {"min": 0, "max": 256}}""").take(10) shouldBe RandomsByte
+    }
+
+    for (maxValue <- Seq("256", "256.1", "256.999"))
+      it(s"should support the max value: $maxValue and \"$maxValue\"") {
+        generate[Long](s"""{"type": "long", "min": 0, "max": $maxValue}""").take(10) shouldBe RandomsByte
+        generate[Long](s"""{"type": "long", "min": 0, "max": "$maxValue"}""").take(10) shouldBe RandomsByte
       }
   }
 
@@ -157,6 +203,7 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
       generate[Int]("""{"type": "int", "start": 10, "step": 2}""").take(10) shouldBe (10 to 28 by 2)
     }
     it("should count down with a negative step") {
+      generate[Int]("""{"type": "int", "step": -1, "max": 4}""").take(6) shouldBe Seq(3, 2, 1, 0, -1, -2)
       generate[Int]("""{"type": "int", "step": -1, "min": 0, "max": 4}""").take(6) shouldBe Seq(3, 2, 1, 0, 3, 2)
     }
     it("should look like a countdown down when you loop every step") {
@@ -168,6 +215,11 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
         12, 0, 1)
       generate[Int]("""{"type": "int", "min": 0, "max": 13, "faker": {"start": 10}}""").take(5) shouldBe Seq(10, 11, 12,
         0, 1)
+    }
+    it("should over at the default max value") {
+      generate[Int](s"""{"type": "int", "step": 1, "start": ${Int.MaxValue - 5}}""").take(10) shouldBe
+        Seq(2147483642, 2147483643, 2147483644, 2147483645, 2147483646, -2147483648, -2147483647, -2147483646,
+          -2147483645, -2147483644)
     }
   }
 
