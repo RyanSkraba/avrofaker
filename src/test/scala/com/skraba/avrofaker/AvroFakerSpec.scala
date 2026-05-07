@@ -3,6 +3,7 @@ package com.skraba.avrofaker
 import com.skraba.avrofaker.AvroFaker._
 import org.apache.avro.generic.GenericRecordBuilder
 import org.apache.avro.{Schema, SchemaBuilder}
+import org.scalatest.Assertion
 import org.scalatest.funspec.AnyFunSpecLike
 import org.scalatest.matchers.should.Matchers
 
@@ -55,97 +56,110 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
 
   val IntSequence: Schema = applyProps(Schema.create(Schema.Type.INT), ArgStep -> 1)
 
-  describe("Generate INT with the random strategy") {
-    val RandomsDefault = Seq(-1630935619, -1483802595, -864264928)
-    val RandomsNonNeg = Seq(711764125, 1302116448, 663681053)
-    val RandomsByte = Seq(187, 212, 61, 155, 163, 79, 140, 29, 152, 200)
-
-    it("should use the random strategy on unannotated schemas") {
-      generate[Int](""""int"""").take(3) shouldBe RandomsDefault
-      generate[Int]("""{"type": "int"}""").take(3) shouldBe RandomsDefault
-    }
-
-    it("should generate a random Int when the random strategy is explicitly set") {
-      generate[Int]("""{"type": "int", "faker": "random"}""").take(3) shouldBe RandomsDefault
-      generate[Int]("""{"type": "int", "faker": {"faker": "random"}}""").take(3) shouldBe RandomsDefault
-    }
-
-    it("should generate a random Int when the random strategy is unset") {
-      generate[Int]("""{"type": "int", "faker": {}}""").take(3) shouldBe RandomsDefault
-    }
-
-    it("should allow configuring the random strategy with a minimum") {
-      generate[Int]("""{"type": "int", "min": 0, "faker": "random"}""").take(3) shouldBe RandomsNonNeg
-      generate[Int]("""{"type": "int", "faker": {"min": 0}}""").take(3) shouldBe RandomsNonNeg
-    }
-
-    it("should implicitly configure the random strategy from the schema annotations") {
-      generate[Int]("""{"type": "int", "min": 0}""").take(3) shouldBe RandomsNonNeg
-    }
-
-    it("should override arguments from the schema annotations") {
-      generate[Int]("""{"type": "int", "min": 100, "faker": {"min": 0}}""").take(3) shouldBe RandomsNonNeg
-    }
-
-    it("should be configurable by the min and the max") {
-      generate[Int]("""{"type": "int", "min": 0, "max": 256}""").take(10) shouldBe RandomsByte
-      generate[Int]("""{"type": "int", "faker": {"min": 0, "max": 256}}""").take(10) shouldBe RandomsByte
-      generate[Int]("""{"type": "int", "min": 0, "faker": {"max": 256}}""").take(10) shouldBe RandomsByte
-      generate[Int]("""{"type": "int", "min": 100, "faker": {"min": 0, "max": 256}}""").take(10) shouldBe RandomsByte
-    }
-
-    for (maxValue <- Seq("256", "256.1", "256.999"))
-      it(s"should support the max value: $maxValue and \"$maxValue\"") {
-        generate[Int](s"""{"type": "int", "min": 0, "max": $maxValue}""").take(10) shouldBe RandomsByte
-        generate[Int](s"""{"type": "int", "min": 0, "max": "$maxValue"}""").take(10) shouldBe RandomsByte
+  case class NumHelper[T](sType: Schema.Type)(implicit ct: ClassTag[T], num: Numeric[T]) {
+    case class ShouldBe(description: String, schema: String) {
+      def execute(expected: Seq[_]): Unit = {
+        it(s"$description: $schema") {
+          val values = generate[T](schema)(ct).take(expected.size)
+          withClue(values.mkString("Found: Seq(", ",", ")")) {
+            num match {
+              case _: Integral[T] => values shouldBe expected
+              case _: Fractional[T] =>
+                values.zip(expected).foreach {
+                  case (f1: Float, f2: Float)   => compare(f1, f2)
+                  case (f1: Float, d2: Double)  => compare(f1, d2.toFloat)
+                  case (d1: Double, f2: Float)  => compare(d1, f2)
+                  case (d1: Double, d2: Double) => compare(d1, d2)
+                }
+            }
+          }
+        }
       }
+    }
+
+    def compare(f1: Float, f2: Float): Assertion = f1 shouldBe (f2 +- 1e-7f)
+    def compare(d1: Double, d2: Double): Assertion = d1 shouldBe (d2 +- 1e-14d)
+
+    def shouldBe(description: String)(schema: String): ShouldBe = {
+      ShouldBe(description, schema.replace("<TYPE>", sType.toString.toLowerCase()))
+    }
+
+    case class Cases(description: String) {
+      def apply(cases: (String, Seq[_])*): Unit = {
+        for ((schema, expected) <- cases)
+          ShouldBe(description, schema.replace("<TYPE>", sType.toString.toLowerCase())).execute(expected)
+      }
+    }
+
+    def apply(description: String): Cases = {
+      Cases(description)
+    }
   }
 
-  describe("Generate LONG with the random strategy") {
-    val RandomsDefault = Seq(-4962768465676381896L, 4437113781045784766L, -6688467811848818630L)
-    val RandomsNonNeg = Seq(1340999404015745395L, 4053417136674644310L, 8448822068277548669L)
-    val RandomsByte = Seq(187, 212, 61, 155, 163, 79, 140, 29, 152, 200)
+  def randomStrategy[T](helper: NumHelper[T], random: Seq[_], nonNeg: Seq[_], byteSize: Seq[_]): Unit =
+    describe(s"Generate ${helper.sType} with the random strategy") {
+      val aNumber = helper.apply _
+      aNumber("should use the random strategy on unannotated schemas")(
+        """"<TYPE>"""" -> random,
+        """{"type": "<TYPE>"}""" -> random
+      )
 
-    it("should use the random strategy on unannotated schemas") {
-      generate[Long](""""long"""").take(3) shouldBe RandomsDefault
-      generate[Long]("""{"type": "long"}""").take(3) shouldBe RandomsDefault
+      aNumber("should generate a random Int when the random strategy is explicitly set")(
+        """{"type": "<TYPE>", "faker": "random"}""" -> random,
+        """{"type": "<TYPE>", "faker": {"faker": "random"}}""" -> random
+      )
+
+      aNumber("should generate a random Int when the random strategy is unset")(
+        """{"type": "<TYPE>", "faker": {}}""" -> random
+      )
+
+      aNumber("should allow configuring the random strategy with a minimum")(
+        """{"type": "<TYPE>", "min": 0, "faker": "random"}""" -> nonNeg,
+        """{"type": "<TYPE>", "faker": {"min": 0}}""" -> nonNeg
+      )
+
+      aNumber("should implicitly configure the random strategy from the schema annotations")(
+        """{"type": "<TYPE>", "min": 0}""" -> nonNeg
+      )
+
+      aNumber("should override arguments from the schema annotations")(
+        """{"type": "<TYPE>", "min": 100, "faker": {"min": 0}}""" -> nonNeg
+      )
+
+      aNumber("should be configurable by the min and the max")(
+        """{"type": "<TYPE>", "min": 0, "max": 256}""" -> byteSize,
+        """{"type": "<TYPE>", "faker": {"min": 0, "max": 256}}""" -> byteSize,
+        """{"type": "<TYPE>", "min": 0, "faker": {"max": 256}}""" -> byteSize,
+        """{"type": "<TYPE>", "min": 100, "faker": {"min": 0, "max": 256}}""" -> byteSize
+      )
     }
 
-    it("should generate a random Int when the random strategy is explicitly set") {
-      generate[Long]("""{"type": "long", "faker": "random"}""").take(3) shouldBe RandomsDefault
-      generate[Long]("""{"type": "long", "faker": {"faker": "random"}}""").take(3) shouldBe RandomsDefault
-    }
-
-    it("should generate a random Int when the random strategy is unset") {
-      generate[Long]("""{"type": "long", "faker": {}}""").take(3) shouldBe RandomsDefault
-    }
-
-    it("should allow configuring the random strategy with a minimum") {
-      generate[Long]("""{"type": "long", "min": 0, "faker": "random"}""").take(3) shouldBe RandomsNonNeg
-      generate[Long]("""{"type": "long", "faker": {"min": 0}}""").take(3) shouldBe RandomsNonNeg
-    }
-
-    it("should implicitly configure the random strategy from the schema annotations") {
-      generate[Long]("""{"type": "long", "min": 0}""").take(3) shouldBe RandomsNonNeg
-    }
-
-    it("should override arguments from the schema annotations") {
-      generate[Long]("""{"type": "long", "min": 100, "faker": {"min": 0}}""").take(3) shouldBe RandomsNonNeg
-    }
-
-    it("should be configurable by the min and the max") {
-      generate[Long]("""{"type": "long", "min": 0, "max": 256}""").take(10) shouldBe RandomsByte
-      generate[Long]("""{"type": "long", "faker": {"min": 0, "max": 256}}""").take(10) shouldBe RandomsByte
-      generate[Long]("""{"type": "long", "min": 0, "faker": {"max": 256}}""").take(10) shouldBe RandomsByte
-      generate[Long]("""{"type": "long", "min": 100, "faker": {"min": 0, "max": 256}}""").take(10) shouldBe RandomsByte
-    }
-
-    for (maxValue <- Seq("256", "256.1", "256.999"))
-      it(s"should support the max value: $maxValue and \"$maxValue\"") {
-        generate[Long](s"""{"type": "long", "min": 0, "max": $maxValue}""").take(10) shouldBe RandomsByte
-        generate[Long](s"""{"type": "long", "min": 0, "max": "$maxValue"}""").take(10) shouldBe RandomsByte
-      }
-  }
+  randomStrategy(
+    new NumHelper[Int](Schema.Type.INT),
+    random = Seq(-1630935619, -1483802595, -864264928),
+    nonNeg = Seq(711764125, 1302116448, 663681053),
+    byteSize = Seq(187, 212, 61, 155, 163, 79, 140, 29, 152, 200)
+  )
+  randomStrategy(
+    new NumHelper[Long](Schema.Type.LONG),
+    random = Seq(-4962768465676381896L, 4437113781045784766L, -6688467811848818630L),
+    nonNeg = Seq(1340999404015745395L, 4053417136674644310L, 8448822068277548669L),
+    byteSize = Seq(187L, 212L, 61L, 155L, 163L, 79L, 140L, 29L, 152L, 200L)
+  )
+  randomStrategy(
+    new NumHelper[Float](Schema.Type.FLOAT),
+    random = Seq(0.730967787376657, 0.24053641567148587, 0.6374174253501083),
+    nonNeg = Seq(0.730967787376657, 0.24053641567148587, 0.6374174253501083),
+    byteSize = Seq(187.1277535684242, 61.57732241190038, 163.1788608896277, 140.9118733101143, 152.97159111608366,
+      85.30391026602234, 98.60843129362394, 252.1194342911511, 225.07072457535492, 240.95978994742129)
+  )
+  randomStrategy(
+    new NumHelper[Double](Schema.Type.DOUBLE),
+    random = Seq(0.730967787376657, 0.24053641567148587, 0.6374174253501083),
+    nonNeg = Seq(0.730967787376657, 0.24053641567148587, 0.6374174253501083),
+    byteSize = Seq(187.1277535684242, 61.57732241190038, 163.1788608896277, 140.9118733101143, 152.97159111608366,
+      85.30391026602234, 98.60843129362394, 252.1194342911511, 225.07072457535492, 240.95978994742129)
+  )
 
   describe("Generate INT with the gauss strategy") {
     val GaussDefault = Seq(80, -90, 208, 76, 98, -168, -2, 11, -39, -64)
