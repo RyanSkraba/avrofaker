@@ -57,6 +57,11 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
   val IntSequence: Schema = applyProps(Schema.create(Schema.Type.INT), ArgStep -> 1)
 
   case class NumHelper[T](sType: Schema.Type)(implicit ct: ClassTag[T], num: Numeric[T]) {
+    val isIntegral: Boolean = num match {
+      case _: Integral[T] => true
+      case _              => false
+    }
+
     case class ShouldBe(description: String, schema: String) {
       def execute(expected: Seq[_]): Unit = {
         it(s"$description: $schema") {
@@ -64,12 +69,10 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
           withClue(values.mkString("Found: Seq(", ",", ")")) {
             num match {
               case _: Integral[T] => values shouldBe expected
-              case _: Fractional[T] =>
+              case fn: Fractional[T] =>
                 values.zip(expected).foreach {
-                  case (f1: Float, f2: Float)   => compare(f1, f2)
-                  case (f1: Float, d2: Double)  => compare(f1, d2.toFloat)
-                  case (d1: Double, f2: Float)  => compare(d1, f2)
-                  case (d1: Double, d2: Double) => compare(d1, d2)
+                  case (f1: Float, f2: Any)  => compare(f1, f2.toString.toFloat)
+                  case (d1: Double, d2: Any) => compare(d1, d2.toString.toDouble)
                 }
             }
           }
@@ -96,7 +99,18 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     }
   }
 
-  def randomStrategy[T](helper: NumHelper[T], random: Seq[_], nonNeg: Seq[_], byteSize: Seq[_]): Unit =
+  object NumHelper {
+    val IntNumHelper = NumHelper[Int](Schema.Type.INT)
+    val LongNumHelper = NumHelper[Long](Schema.Type.LONG)
+    val FloatNumHelper = NumHelper[Float](Schema.Type.FLOAT)
+    val DoubleNumHelper = NumHelper[Double](Schema.Type.DOUBLE)
+    def asInt(fn: NumHelper[Int] => Unit): Unit = fn(IntNumHelper)
+    def asLong(fn: NumHelper[Long] => Unit): Unit = fn(LongNumHelper)
+    def asFloat(fn: NumHelper[Float] => Unit): Unit = fn(FloatNumHelper)
+    def asDouble(fn: NumHelper[Double] => Unit): Unit = fn(DoubleNumHelper)
+  }
+
+  def randomStrategy[T](random: Seq[_], withMinimum: Seq[_], byteSize: Seq[_])(helper: NumHelper[T]): Unit =
     describe(s"Generate ${helper.sType} with the random strategy") {
       val aNumber = helper.apply _
       aNumber("should use the random strategy on unannotated schemas")(
@@ -113,18 +127,33 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
         """{"type": "<TYPE>", "faker": {}}""" -> random
       )
 
-      aNumber("should allow configuring the random strategy with a minimum")(
-        """{"type": "<TYPE>", "min": 0, "faker": "random"}""" -> nonNeg,
-        """{"type": "<TYPE>", "faker": {"min": 0}}""" -> nonNeg
-      )
+      if (helper.isIntegral) {
+        aNumber("should allow configuring the random strategy with a minimum")(
+          """{"type": "<TYPE>", "min": 0, "faker": "random"}""" -> withMinimum,
+          """{"type": "<TYPE>", "faker": {"min": 0}}""" -> withMinimum
+        )
 
-      aNumber("should implicitly configure the random strategy from the schema annotations")(
-        """{"type": "<TYPE>", "min": 0}""" -> nonNeg
-      )
+        aNumber("should implicitly configure the random strategy from the schema annotations")(
+          """{"type": "<TYPE>", "min": 0}""" -> withMinimum
+        )
 
-      aNumber("should override arguments from the schema annotations")(
-        """{"type": "<TYPE>", "min": 100, "faker": {"min": 0}}""" -> nonNeg
-      )
+        aNumber("should override arguments from the schema annotations")(
+          """{"type": "<TYPE>", "min": 100, "faker": {"min": 0}}""" -> withMinimum
+        )
+      } else {
+        aNumber("should allow configuring the random strategy with a minimum")(
+          """{"type": "<TYPE>", "min": 0.5, "faker": "random"}""" -> withMinimum,
+          """{"type": "<TYPE>", "faker": {"min": 0.5}}""" -> withMinimum
+        )
+
+        aNumber("should implicitly configure the random strategy from the schema annotations")(
+          """{"type": "<TYPE>", "min": 0.5}""" -> withMinimum
+        )
+
+        aNumber("should override arguments from the schema annotations")(
+          """{"type": "<TYPE>", "min": -0.5, "faker": {"min": 0.5}}""" -> withMinimum
+        )
+      }
 
       aNumber("should be configurable by the min and the max")(
         """{"type": "<TYPE>", "min": 0, "max": 256}""" -> byteSize,
@@ -134,76 +163,123 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
       )
     }
 
-  randomStrategy(
-    new NumHelper[Int](Schema.Type.INT),
-    random = Seq(-1630935619, -1483802595, -864264928),
-    nonNeg = Seq(711764125, 1302116448, 663681053),
-    byteSize = Seq(187, 212, 61, 155, 163, 79, 140, 29, 152, 200)
+  NumHelper.asInt(
+    randomStrategy(
+      random = Seq(-1630935619, -1483802595, -864264928),
+      withMinimum = Seq(711764125, 1302116448, 663681053),
+      byteSize = Seq(187, 212, 61, 155, 163, 79, 140, 29, 152, 200)
+    )
   )
-  randomStrategy(
-    new NumHelper[Long](Schema.Type.LONG),
-    random = Seq(-4962768465676381896L, 4437113781045784766L, -6688467811848818630L),
-    nonNeg = Seq(1340999404015745395L, 4053417136674644310L, 8448822068277548669L),
-    byteSize = Seq(187L, 212L, 61L, 155L, 163L, 79L, 140L, 29L, 152L, 200L)
+  NumHelper.asLong(
+    randomStrategy(
+      random = Seq(-4962768465676381896L, 4437113781045784766L, -6688467811848818630L),
+      withMinimum = Seq(1340999404015745395L, 4053417136674644310L, 8448822068277548669L),
+      byteSize = Seq(187L, 212L, 61L, 155L, 163L, 79L, 140L, 29L, 152L, 200L)
+    )
   )
-  randomStrategy(
-    new NumHelper[Float](Schema.Type.FLOAT),
-    random = Seq(0.730967787376657, 0.24053641567148587, 0.6374174253501083),
-    nonNeg = Seq(0.730967787376657, 0.24053641567148587, 0.6374174253501083),
-    byteSize = Seq(187.1277535684242, 61.57732241190038, 163.1788608896277, 140.9118733101143, 152.97159111608366,
-      85.30391026602234, 98.60843129362394, 252.1194342911511, 225.07072457535492, 240.95978994742129)
+  NumHelper.asFloat(
+    randomStrategy(
+      random = Seq(0.730967787376657, 0.24053641567148587, 0.6374174253501083),
+      withMinimum = Seq(0.8654838936883285, 0.6202682078357429, 0.8187087126750541),
+      byteSize = Seq(187.1277535684242, 61.57732241190038, 163.1788608896277, 140.9118733101143, 152.97159111608366,
+        85.30391026602234, 98.60843129362394, 252.1194342911511, 225.07072457535492, 240.95978994742129)
+    )
   )
-  randomStrategy(
-    new NumHelper[Double](Schema.Type.DOUBLE),
-    random = Seq(0.730967787376657, 0.24053641567148587, 0.6374174253501083),
-    nonNeg = Seq(0.730967787376657, 0.24053641567148587, 0.6374174253501083),
-    byteSize = Seq(187.1277535684242, 61.57732241190038, 163.1788608896277, 140.9118733101143, 152.97159111608366,
-      85.30391026602234, 98.60843129362394, 252.1194342911511, 225.07072457535492, 240.95978994742129)
+  NumHelper.asDouble(
+    randomStrategy(
+      random = Seq(0.730967787376657, 0.24053641567148587, 0.6374174253501083),
+      withMinimum = Seq(0.8654838936883285, 0.6202682078357429, 0.8187087126750541),
+      byteSize = Seq(187.1277535684242, 61.57732241190038, 163.1788608896277, 140.9118733101143, 152.97159111608366,
+        85.30391026602234, 98.60843129362394, 252.1194342911511, 225.07072457535492, 240.95978994742129)
+    )
   )
 
-  describe("Generate INT with the gauss strategy") {
-    val GaussDefault = Seq(80, -90, 208, 76, 98, -168, -2, 11, -39, -64)
-    val Gauss100_10 = Seq(108, 90, 120, 107, 109, 83, 99, 101, 96, 93)
+  def gaussStrategy[T](dflt: Seq[_], gauss100_10: Seq[_], gauss100_10NonNeg: Seq[_])(helper: NumHelper[T]): Unit =
+    describe(s"Generate ${helper.sType} with the gauss strategy") {
+      val aNumber = helper.apply _
 
-    it(
-      "should generate between a bell curve of numbers centered around 0, with 95% of the values between -200 and 200"
-    ) {
-      // These are all equivalent
-      generate[Int]("""{"type": "int", "faker": "gauss"}""").take(10) shouldBe GaussDefault
-      generate[Int]("""{"type": "int", "mean" : 0}""").take(10) shouldBe GaussDefault
-      generate[Int]("""{"type": "int", "mean" : 0.0}""").take(10) shouldBe GaussDefault
-      generate[Int]("""{"type": "int", "mean" : "0"}""").take(10) shouldBe GaussDefault
-      generate[Int]("""{"type": "int", "mean" : "0.0"}""").take(10) shouldBe GaussDefault
-      generate[Int]("""{"type": "int", "stddev" : 100}""").take(10) shouldBe GaussDefault
-      generate[Int]("""{"type": "int", "stddev" : "100"}""").take(10) shouldBe GaussDefault
-      generate[Int]("""{"type": "int", "stddev" : 100.0}""").take(10) shouldBe GaussDefault
-      generate[Int]("""{"type": "int", "stddev" : "100.0"}""").take(10) shouldBe GaussDefault
-      generate[Int]("""{"type": "int", "mean": 0, "faker": {"stddev": 100}}""").take(10) shouldBe GaussDefault
+      val stddev = if (helper.isIntegral) "100" else "1"
+
+      aNumber(
+        "should generate between a bell curve of numbers centered around 0, with 95% of the values between -200 and 200"
+      )(
+        // These are all equivalent
+        s"""{"type": "<TYPE>", "faker": "gauss"}""" -> dflt,
+        s"""{"type": "<TYPE>", "mean" : 0}""" -> dflt,
+        s"""{"type": "<TYPE>", "mean" : 0.0}""" -> dflt,
+        s"""{"type": "<TYPE>", "mean" : "0"}""" -> dflt,
+        s"""{"type": "<TYPE>", "mean" : "0.0"}""" -> dflt,
+        s"""{"type": "<TYPE>", "stddev" : $stddev}""" -> dflt,
+        s"""{"type": "<TYPE>", "stddev" : "$stddev"}""" -> dflt,
+        s"""{"type": "<TYPE>", "stddev" : $stddev.0}""" -> dflt,
+        s"""{"type": "<TYPE>", "stddev" : "$stddev.0"}""" -> dflt,
+        s"""{"type": "<TYPE>", "mean": 0, "faker": {"stddev": $stddev}}""" -> dflt
+      )
+
+      aNumber(
+        "should generate numbers centered around 100, with 95% of the values between `80` and `120`, with possible negatives"
+      )(
+        // Note that it is *extremely* unlikely that a value outside 10 standard deviations would ever occur.
+        """{"type": "<TYPE>", "mean": 100, "stddev": 10}""" -> gauss100_10,
+        """{"type": "<TYPE>", "mean": 100, "faker": {"stddev": 10}}""" -> gauss100_10,
+        """{"type": "<TYPE>", "stddev": 10, "faker": {"mean": 100}}""" -> gauss100_10,
+        """{"type": "<TYPE>", "faker": {"mean": 100, "stddev": 10}}""" -> gauss100_10
+      )
+
+      aNumber(
+        "should generate numbers centered around 100, with 95% of the values between `80` and `120`, guaranteed no negatives"
+      )(
+        // But here it is impossible
+        """{"type": "<TYPE>", "min": 0, "faker": {"mean": 100, "stddev": 10}}""" -> gauss100_10
+      )
+
+      aNumber("should apply a filter to only return numbers greater than the mean")(
+        """{"type": "<TYPE>", "min": 100, "faker": {"mean": 100, "stddev": 10}}""" -> gauss100_10NonNeg
+        // Be careful about setting a valid interval that is unlikely to have a generated number.  This next example
+        // requires generated values to be 5 standard deviations from the main, so only one out of every million
+        // generated values will be retained.
+        // """{"type": "<TYPE>", "max": 50, "gauss": {"mean": 100, "stddev": 10}}"""
+      )
     }
-    it(
-      "should generate numbers centered around 100, with 95% of the values between `80` and `120`, with possible negatives"
-    ) {
-      // Note that it is *extremely* unlikely that a value outside 10 standard deviations would ever occur.
-      generate[Int]("""{"type": "int", "mean": 100, "stddev": 10}""").take(10) shouldBe Gauss100_10
-      generate[Int]("""{"type": "int", "mean": 100, "faker": {"stddev": 10}}""").take(10) shouldBe Gauss100_10
-      generate[Int]("""{"type": "int", "stddev": 10, "faker": {"mean": 100}}""").take(10) shouldBe Gauss100_10
-      generate[Int]("""{"type": "int", "faker": {"mean": 100, "stddev": 10}}""").take(10) shouldBe Gauss100_10
-    }
-    it(
-      "should generate numbers centered around 100, with 95% of the values between `80` and `120`, guaranteed no negatives"
-    ) {
-      // But here it is impossible
-      generate[Int]("""{"type": "int", "min": 0, "faker": {"mean": 100, "stddev": 10}}""").take(10) shouldBe Gauss100_10
-    }
-    it("should apply a filter to only return numbers greater than the mean") {
-      generate[Int]("""{"type": "int", "min": 100, "faker": {"mean": 100, "stddev": 10}}""").take(10) shouldBe Seq(108,
-        120, 107, 109, 101, 100, 105, 102, 114, 102)
-      // Be careful about setting a valid interval that is unlikely to have a generated number.  This next example
-      // requires generated values to be 5 standard deviations from the main, so only one out of every million
-      // generated values will be retained.
-      // generate[Int]("""{"type": "int", "max": 50, "gauss": {"mean": 100, "stddev": 10}}""").take(10)
-    }
-  }
+
+  NumHelper.asInt(
+    gaussStrategy(
+      dflt = Seq(80, -90, 208, 76, 98, -168, -2, 11, -39, -64),
+      gauss100_10 = Seq(108, 90, 120, 107, 109, 83, 99, 101, 96, 93),
+      gauss100_10NonNeg = Seq(108, 120, 107, 109, 101, 100, 105, 102, 114, 102)
+    )
+  )
+  NumHelper.asLong(
+    gaussStrategy(
+      dflt = Seq(80, -90, 208, 76, 98, -168, -2, 11, -39, -64),
+      gauss100_10 = Seq(108, 90, 120, 107, 109, 83, 99, 101, 96, 93),
+      gauss100_10NonNeg = Seq(108, 120, 107, 109, 101, 100, 105, 102, 114, 102)
+    )
+  )
+  NumHelper.asFloat(
+    gaussStrategy(
+      dflt = Seq(0.8025330637390305, -0.9015460884175122, 2.080920790428163, 0.7637707684364894, 0.9845745328825128,
+        -1.6834122587673428, -0.027290262907887285, 0.11524570286202315, -0.39016704137993785, -0.6433888131264491),
+      gauss100_10 = Seq(108.02533063739031, 90.98453911582487, 120.80920790428164, 107.6377076843649,
+        109.84574532882513, 83.16587741232658, 99.72709737092113, 101.15245702862023, 96.09832958620062,
+        93.5661118687355),
+      gauss100_10NonNeg = Seq(108.02533063739031, 120.80920790428164, 107.6377076843649, 109.84574532882513,
+        101.15245702862023, 100.52460907198835, 105.21342076929889, 102.60718194028357, 114.03147381720936,
+        102.71130617070202)
+    )
+  )
+  NumHelper.asDouble(
+    gaussStrategy(
+      dflt = Seq(0.8025330637390305, -0.9015460884175122, 2.080920790428163, 0.7637707684364894, 0.9845745328825128,
+        -1.6834122587673428, -0.027290262907887285, 0.11524570286202315, -0.39016704137993785, -0.6433888131264491),
+      gauss100_10 = Seq(108.02533063739031, 90.98453911582487, 120.80920790428164, 107.6377076843649,
+        109.84574532882513, 83.16587741232658, 99.72709737092113, 101.15245702862023, 96.09832958620062,
+        93.5661118687355),
+      gauss100_10NonNeg = Seq(108.02533063739031, 120.80920790428164, 107.6377076843649, 109.84574532882513,
+        101.15245702862023, 100.52460907198835, 105.21342076929889, 102.60718194028357, 114.03147381720936,
+        102.71130617070202)
+    )
+  )
 
   describe("Generate INT with the sequence strategy") {
     it("should generate a simple sequence") {
