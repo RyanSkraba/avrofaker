@@ -71,8 +71,10 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
               case _: Integral[T] => values shouldBe expected
               case fn: Fractional[T] =>
                 values.zip(expected).foreach {
-                  case (f1: Float, f2: Any)  => compare(f1, f2.toString.toFloat)
-                  case (d1: Double, d2: Any) => compare(d1, d2.toString.toDouble)
+                  case (f1: Float, f2: Float) if f1 == f2 || f1.isNaN && f2.isNaN   => ()
+                  case (d1: Double, d2: Double) if d1 == d2 || d1.isNaN && d2.isNaN => ()
+                  case (f1: Float, f2: Any)                                         => compare(f1, f2.toString.toFloat)
+                  case (d1: Double, d2: Any)                                        => compare(d1, d2.toString.toDouble)
                 }
             }
           }
@@ -281,37 +283,81 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     )
   )
 
-  describe("Generate INT with the sequence strategy") {
-    it("should generate a simple sequence") {
-      generate[Int]("""{"type": "int", "faker": "sequence"}""").take(10) shouldBe (0 to 9)
-      generate[Int]("""{"type": "int", "step": 1}""").take(10) shouldBe (0 to 9)
-    }
-    it("should start from a specific value") {
-      generate[Int]("""{"type": "int", "start": 10000}""").take(10) shouldBe (10000 to 10009)
-    }
-    it("should start from a specific value and step") {
-      generate[Int]("""{"type": "int", "start": 10, "step": 2}""").take(10) shouldBe (10 to 28 by 2)
-    }
-    it("should count down with a negative step") {
-      generate[Int]("""{"type": "int", "step": -1, "max": 4}""").take(6) shouldBe Seq(3, 2, 1, 0, -1, -2)
-      generate[Int]("""{"type": "int", "step": -1, "min": 0, "max": 4}""").take(6) shouldBe Seq(3, 2, 1, 0, 3, 2)
-    }
-    it("should look like a countdown down when you loop every step") {
-      generate[Int]("""{"type": "int", "start": 3, "min": 0, "max": 4, "step": 3}""").take(6) shouldBe Seq(3, 2, 1, 0,
-        3, 2)
-    }
-    it("should start from a specific value and loop") {
-      generate[Int]("""{"type": "int", "min": 0,  "faker": {"start": 10, "max": 13}}""").take(5) shouldBe Seq(10, 11,
-        12, 0, 1)
-      generate[Int]("""{"type": "int", "min": 0, "max": 13, "faker": {"start": 10}}""").take(5) shouldBe Seq(10, 11, 12,
-        0, 1)
-    }
-    it("should over at the default max value") {
-      generate[Int](s"""{"type": "int", "step": 1, "start": ${Int.MaxValue - 5}}""").take(10) shouldBe
-        Seq(2147483642, 2147483643, 2147483644, 2147483645, 2147483646, -2147483648, -2147483647, -2147483646,
-          -2147483645, -2147483644)
+  def sequenceStrategy[T]()(helper: NumHelper[T]): Unit = {
+    describe(s"Generate ${helper.sType} with the sequence strategy") {
+      val aNumber = helper.apply _
+
+      aNumber("should generate a simple sequence")(
+        """{"type": "<TYPE>", "faker": "sequence"}""" -> (0 to 9),
+        """{"type": "<TYPE>", "step": 1}""" -> (0 to 9)
+      )
+      aNumber("should start from a specific value")(
+        """{"type": "<TYPE>", "start": 10000}""" -> (10000 to 10009)
+      )
+      aNumber("should start from a specific value and step")(
+        """{"type": "<TYPE>", "start": 10, "step": 2}""" -> (10 to 28 by 2)
+      )
+      aNumber("should count down with a negative step")(
+        """{"type": "<TYPE>", "step": -1, "max": 4}""" -> Seq(3, 2, 1, 0, -1, -2),
+        """{"type": "<TYPE>", "step": -1, "min": 0, "max": 4}""" -> Seq(3, 2, 1, 0, 3, 2)
+      )
+      aNumber("should look like a countdown down when you loop every step")(
+        """{"type": "<TYPE>", "start": 3, "min": 0, "max": 4, "step": 3}""" -> Seq(3, 2, 1, 0, 3, 2)
+      )
+      aNumber("should start from a specific value and loop")(
+        """{"type": "<TYPE>", "min": 0,  "faker": {"start": 10, "max": 13}}""" -> Seq(10, 11, 12, 0, 1),
+        """{"type": "<TYPE>", "min": 0, "max": 13, "faker": {"start": 10}}""" -> Seq(10, 11, 12, 0, 1)
+      )
+
+      if (helper.sType == Schema.Type.INT)
+        aNumber("should roll over at the default max value")(
+          s"""{"type": "<TYPE>", "step": 1, "start": ${Int.MaxValue - 5}}""" -> Seq(2147483642, 2147483643, 2147483644,
+            2147483645, 2147483646, -2147483648, -2147483647, -2147483646, -2147483645, -2147483644)
+        )
+      else if (helper.sType == Schema.Type.LONG)
+        aNumber("should roll over at the default max value")(
+          s"""{"type": "<TYPE>", "step": 1, "start": ${Long.MaxValue - 5}}""" -> Seq(9223372036854775802L,
+            9223372036854775803L, 9223372036854775804L, 9223372036854775805L, 9223372036854775806L,
+            -9223372036854775808L, -9223372036854775807L, -9223372036854775806L, -9223372036854775805L,
+            -9223372036854775804L)
+        )
+      else if (helper.sType == Schema.Type.FLOAT)
+        aNumber("should go to infinity at the default max value")(
+          s"""{"type": "<TYPE>", "step": ${Float.MaxValue * 0.01}, "start": ${Float.MaxValue * 0.95}}""" -> Seq(
+            3.2326822e38,
+            3.2667104e38,
+            3.3007389e38,
+            3.334767e38,
+            3.3687953e38,
+            3.4028235e38,
+            Float.PositiveInfinity,
+            Float.PositiveInfinity,
+            Float.PositiveInfinity,
+            Float.PositiveInfinity
+          )
+        )
+      else if (helper.sType == Schema.Type.DOUBLE)
+        aNumber("should go to infinity at the default max value")(
+          s"""{"type": "<TYPE>", "step": ${Double.MaxValue * 0.01}, "start": ${Double.MaxValue * 0.95}}""" -> Seq(
+            1.7078084781191998e308,
+            1.725785409467823e308,
+            1.7437623408164462e308,
+            1.7617392721650694e308,
+            1.7797162035136925e308,
+            1.7976931348623157e308,
+            Double.NaN, // TODO
+            Double.NaN,
+            Double.NaN,
+            Double.NaN
+          )
+        )
     }
   }
+
+  NumHelper.asInt(sequenceStrategy())
+  NumHelper.asLong(sequenceStrategy())
+  NumHelper.asFloat(sequenceStrategy())
+  NumHelper.asDouble(sequenceStrategy())
 
   describe("Generate INT with the value strategy") {
     it("should generate a constant value") {
