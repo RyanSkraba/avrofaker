@@ -37,6 +37,7 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
   class Tester[T](val sType: Schema.Type)(implicit ct: ClassTag[T]) {
 
     /** Create an AvroFaker from the given schema with the given properties.
+      *
       * @param schema
       *   The base schema to use
       * @param props
@@ -120,6 +121,7 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     }
 
     private[this] def compare(f1: Float, f2: Float): Assertion = f1 shouldBe (f2 +- 1e-7f)
+
     private[this] def compare(d1: Double, d2: Double): Assertion = d1 shouldBe (d2 +- 1e-14d)
 
     class Cases(description: String) {
@@ -146,7 +148,7 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     val String = new Tester[String](Schema.Type.STRING)
   }
 
-  def randomStrategy[T](helper: NumericTester[T]): Unit =
+  def randomStrategy[T](helper: NumericTester[T]): Unit = {
     describe(s"Generate ${helper.sType} with the random strategy") {
       val aNumber = helper.apply _
 
@@ -228,13 +230,13 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
         """{"type": "<TYPE>", "min": 100, "faker": {"min": 0, "max": 256}}""" -> byteSize
       )
     }
-
+  }
   randomStrategy(Tester.Int)
   randomStrategy(Tester.Long)
   randomStrategy(Tester.Float)
   randomStrategy(Tester.Double)
 
-  def gaussStrategy[T](helper: NumericTester[T]): Unit =
+  def gaussStrategy[T](helper: NumericTester[T]): Unit = {
     describe(s"Generate ${helper.sType} with the gauss strategy") {
       val aNumber = helper.apply _
 
@@ -303,7 +305,7 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
         // """{"type": "<TYPE>", "max": 50, "gauss": {"mean": 100, "stddev": 10}}"""
       )
     }
-
+  }
   gaussStrategy(Tester.Int)
   gaussStrategy(Tester.Long)
   gaussStrategy(Tester.Float)
@@ -379,41 +381,46 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
         )
     }
   }
-
   sequenceStrategy(Tester.Int)
   sequenceStrategy(Tester.Long)
   sequenceStrategy(Tester.Float)
   sequenceStrategy(Tester.Double)
 
-  describe("Generate INT with the value strategy") {
-    it("should generate a constant value") {
-      // These are all equivalent
-      Tester.Int.generate("""{"type": "int", "value": 123}""").take(10) shouldBe Seq.fill(10)(123)
-      Tester.Int.generate("""{"type": "int", "faker": 123}""").take(10) shouldBe Seq.fill(10)(123)
-      Tester.Int.generate("""{"type": "int", "faker": "value", "value": 123}""").take(10) shouldBe Seq.fill(10)(123)
-      Tester.Int.generate("""{"type": "int", "value": 123.9}""").take(10) shouldBe Seq.fill(10)(123)
-      Tester.Int.generate("""{"type": "int", "value": "123.1"}""").take(10) shouldBe Seq.fill(10)(123)
-    }
+  def valueStrategy[T](helper: NumericTester[T]): Unit = {
+    describe(s"Generate ${helper.sType} with the value strategy") {
+      val aNumber = helper.apply _
 
-    it("should apply the minimum and maximum to the constant value") {
-      Tester.Int.generate("""{"type": "int", "min": 0, "value": 123}""").take(10) shouldBe Seq.fill(10)(123)
-      Tester.Int.generate("""{"type": "int", "min": 234, "value": 123}""").take(10) shouldBe Seq.fill(10)(234)
-      Tester.Int.generate("""{"type": "int", "max": 0, "value": 123}""").take(10) shouldBe Seq.fill(10)(0)
-      Tester.Int.generate("""{"type": "int", "max": 234, "value": 123}""").take(10) shouldBe Seq.fill(10)(123)
-    }
+      aNumber("should generate a constant value")(
+        // These are all equivalent
+        """{"type": "<TYPE>", "value": 123}""" -> Seq.fill(10)(123),
+        """{"type": "<TYPE>", "faker": 123}""" -> Seq.fill(10)(123),
+        """{"type": "<TYPE>", "faker": "value", "value": 123}""" -> Seq.fill(10)(123),
+        """{"type": "<TYPE>", "value": 123.9}""" -> Seq.fill(10)(if (helper.isIntegral) 123 else 123.9),
+        """{"type": "<TYPE>", "value": "123.1"}""" -> Seq.fill(10)(if (helper.isIntegral) 123 else 123.1)
+      )
 
-    for (maxValue <- Seq("256", "256.1", "256.999"))
-      it(s"should support the max and min value: $maxValue and \"$maxValue\"") {
-        Tester.Int.generate(s"""{"type": "int", "value": 999, "max": $maxValue}""").take(10) shouldBe Seq.fill(10)(256)
-        Tester.Int.generate(s"""{"type": "int", "value": 999, "max": "$maxValue"}""").take(10) shouldBe Seq.fill(10)(
-          256
-        )
-        Tester.Int.generate(s"""{"type": "int", "value": 123, "min": $maxValue}""").take(10) shouldBe Seq.fill(10)(256)
-        Tester.Int.generate(s"""{"type": "int", "value": 123, "min": "$maxValue"}""").take(10) shouldBe Seq.fill(10)(
-          256
+      aNumber("should apply the minimum and maximum to the constant value")(
+        """{"type": "<TYPE>", "min": 0, "value": 123}""" -> Seq.fill(10)(123),
+        """{"type": "<TYPE>", "min": 234, "value": 123}""" -> Seq.fill(10)(234),
+        """{"type": "<TYPE>", "max": 0, "value": 123}""" -> Seq.fill(10)(0),
+        """{"type": "<TYPE>", "max": 234, "value": 123}""" -> Seq.fill(10)(123)
+      )
+
+      for (maxValue <- Seq("256", "256.1", "256.999")) {
+        val expected = Seq.fill(10)(if (helper.isIntegral) 256 else maxValue)
+        aNumber(s"should support the max and min value: $maxValue and \"$maxValue\"")(
+          s"""{"type": "<TYPE>", "value": 999, "max": $maxValue}""" -> expected,
+          s"""{"type": "<TYPE>", "value": 999, "max": "$maxValue"}""" -> expected,
+          s"""{"type": "<TYPE>", "value": 123, "min": $maxValue}""" -> expected,
+          s"""{"type": "<TYPE>", "value": 123, "min": "$maxValue"}""" -> expected
         )
       }
+    }
   }
+  valueStrategy(Tester.Int)
+  valueStrategy(Tester.Long)
+  valueStrategy(Tester.Float)
+  valueStrategy(Tester.Double)
 
   describe("Generate INT with the oneof strategy") {
     it("should pick a random value between 123, 234 and 345") {
