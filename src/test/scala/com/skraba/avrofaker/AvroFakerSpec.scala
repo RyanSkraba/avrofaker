@@ -12,20 +12,7 @@ import scala.util.{Random, Try}
 
 class AvroFakerSpec extends AnyFunSpecLike with Matchers {
 
-  /** @param schema
-    *   A schema to modify with the given properties
-    * @param props
-    *   Pairs of property keys and values to apply to the schema
-    * @return
-    *   The instance of the schema passed in, with the properties applied
-    */
-  def applyProps(schema: Schema, props: (String, Any)*): Schema = {
-    for ((key, value) <- props)
-      schema.addProp(key, value)
-    schema
-  }
-
-  val IntSequence: Schema = applyProps(Schema.create(Schema.Type.INT), ArgStep -> 1)
+  val IntSequence: Schema = new Schema.Parser().parse("""{"type": "int", "step": 1}""")
 
   /** This tester helps run suites by generating data.
     *
@@ -35,6 +22,38 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     *   The type of datum that AvroFaker should be generating
     */
   class Tester[T](val sType: Schema.Type)(implicit ct: ClassTag[T]) {
+
+    /** Given the schema under test, injects the Avro type from this helper.
+      *
+      * This will either
+      *   - Replace any occurrences of &lt;TYPE&gt; by the appropriate Avro schema type, or
+      *   - If it looks like a JSON object without a "type": attribute, it will rewrite to add this attribute,
+      *   - Leave it alone.
+      *
+      * @param schema
+      *   A string
+      * @return
+      *   The schema with the helper type inserted.
+      */
+    def adaptSchemaWithType(schema: String): String = schema match {
+      case _ if schema.contains("<TYPE>") => schema.replace("<TYPE>", sType.toString.toLowerCase())
+      case _ if schema.startsWith("{") && !schema.contains("\"type\":") =>
+        s"""{"type": "${sType.toString.toLowerCase}", ${schema.substring(1)}"""
+      case _ => schema
+    }
+
+    /** @param schema
+      *   A schema to modify with the given properties
+      * @param props
+      *   Pairs of property keys and values to apply to the schema
+      * @return
+      *   The instance of the schema passed in, with the properties applied
+      */
+    def applyProps(schema: Schema, props: (String, Any)*): Schema = {
+      for ((key, value) <- props)
+        schema.addProp(key, value)
+      schema
+    }
 
     /** Create an AvroFaker from the given schema with the given properties.
       *
@@ -61,6 +80,37 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
       generate(new Schema.Parser().parse(schema), props: _*)
 
     def generate(props: (String, Any)*): LazyList[T] = generate(Schema.create(sType), props: _*)
+
+    class Dist(val xs: (_, Long)*) {
+
+      /** Produces the test to be executed (an `it` word). */
+      def execute(description: String, schema: String, fn: Any => Any): Unit = {
+        // Generate the values and ensure they are the correct type at the generator
+        val values = generate(schema).take(xs.map(_._2).sum.toInt)
+
+        it(s"$description: $schema") {
+          val actualDistribution = values.map(fn).groupBy(identity).view.mapValues(_.size).toMap
+          withClue(actualDistribution.mkString("Found: Map(", ",", ")")) {
+            actualDistribution shouldBe xs.collect { case (k, v) => fn(k) -> v }.toMap
+          }
+        }
+      }
+    }
+
+    class Applies(description: String) {
+      def apply(schema: String, dist: Dist): Unit =
+        dist.execute(description, adaptSchemaWithType(schema), fn = identity)
+
+      def apply(schema: String, expected: Seq[_]): Unit = {}
+
+      def apply(cases: (String, Seq[_])*): Unit = {
+        for ((schema, expected) <- cases) apply(schema, expected)
+      }
+    }
+
+    def apply(description: String): Applies = {
+      new Applies(description)
+    }
   }
 
   /** This tester helps run suites on all four types of numeric values: INT, LONG, FLOAT and DOUBLE.
@@ -79,6 +129,21 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
       case _              => false
     }
 
+    def toLong(in: Any): Long = in match {
+      case d: Double => d.toLong
+      case i: Int    => i
+      case l: Long   => l
+      case other     => Try(other.toString.toLong).orElse(Try(other.toString.toDouble.toLong)).get
+    }
+
+    def toDouble(in: Any): Double = in match {
+      case i: Int    => i.toDouble
+      case l: Long   => l.toDouble
+      case f: Float  => f.toDouble
+      case d: Double => d
+      case other     => other.toString.toDouble
+    }
+
     private[this] case class IntegralIt(description: String, schema: String) {
 
       /** Produces the test to be executed (an `it` word). */
@@ -87,14 +152,7 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
         val values = generate(schema).take(expected.size)
 
         it(s"$description: $schema") {
-          // Truncate any values that are floating point.
-          val expectedAsLong = expected.map {
-            case d: Double => d.toLong
-            case i: Int    => i
-            case l: Long   => l
-            case other     => Try(other.toString.toLong).orElse(Try(other.toString.toDouble.toLong)).get
-          }
-          values shouldBe expectedAsLong
+          values shouldBe expected.map(toLong)
         }
       }
     }
@@ -118,31 +176,30 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
           }
         }
       }
+
+      private[this] def compare(f1: Float, f2: Float): Assertion = f1 shouldBe (f2 +- 1e-7f)
+
+      private[this] def compare(d1: Double, d2: Double): Assertion = d1 shouldBe (d2 +- 1e-14d)
     }
 
-    private[this] def compare(f1: Float, f2: Float): Assertion = f1 shouldBe (f2 +- 1e-7f)
+    class NumericApplies(description: String) extends Applies(description) {
+      override def apply(schema: String, dist: Dist): Unit = {
+        if (isIntegral)
+          dist.execute(description, adaptSchemaWithType(schema), toLong)
+        else
+          dist.execute(description, adaptSchemaWithType(schema), toDouble)
+      }
 
-    private[this] def compare(d1: Double, d2: Double): Assertion = d1 shouldBe (d2 +- 1e-14d)
-
-    class Cases(description: String) {
-      def apply(cases: (String, Seq[_])*): Unit = {
-        for ((schema, expected) <- cases) {
-          val schemaWithType = schema match {
-            case _ if schema.contains("<TYPE>") => schema.replace("<TYPE>", sType.toString.toLowerCase())
-            case _ if schema.startsWith("{") && !schema.contains("\"type\"") =>
-              s"""{"type": "${sType.toString.toLowerCase}", ${schema.substring(1)}"""
-            case _ => schema
-          }
-          if (isIntegral)
-            IntegralIt(description, schemaWithType).execute(expected)
-          else
-            FractionalIt(description, schemaWithType).execute(expected)
-        }
+      override def apply(schema: String, expected: Seq[_]): Unit = {
+        if (isIntegral)
+          IntegralIt(description, adaptSchemaWithType(schema)).execute(expected)
+        else
+          FractionalIt(description, adaptSchemaWithType(schema)).execute(expected)
       }
     }
 
-    def apply(description: String): Cases = {
-      new Cases(description)
+    override def apply(description: String): NumericApplies = {
+      new NumericApplies(description)
     }
   }
 
@@ -154,11 +211,11 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     val String = new Tester[String](Schema.Type.STRING)
   }
 
-  def randomStrategy[T](aNumber: NumericTester[T]): Unit = {
-    describe(s"Generate ${aNumber.sType} with the random strategy") {
+  def randomStrategy[T](it: NumericTester[T]): Unit = {
+    describe(s"Generate ${it.sType} with the random strategy") {
 
       /** Expected results over the default random range */
-      val random = aNumber.sType match {
+      val random = it.sType match {
         case Schema.Type.INT =>
           Seq(-1630935619, -1483802595, -864264928)
         case Schema.Type.LONG =>
@@ -168,7 +225,7 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
       }
 
       /** Expected results over the default positive range */
-      val withMinimum = aNumber.sType match {
+      val withMinimum = it.sType match {
         case Schema.Type.INT =>
           Seq(711764125, 1302116448, 663681053)
         case Schema.Type.LONG =>
@@ -178,7 +235,7 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
       }
 
       /** Expected results over [0, 256) */
-      val byteSize = aNumber.sType match {
+      val byteSize = it.sType match {
         case Schema.Type.INT | Schema.Type.LONG =>
           Seq(187, 212, 61, 155, 163, 79, 140, 29, 152, 200)
         case _ =>
@@ -186,49 +243,49 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
             85.30391026602234, 98.60843129362394, 252.1194342911511, 225.07072457535492, 240.95978994742129)
       }
 
-      aNumber("should use the random strategy on unannotated schemas")(
+      it("should use the random strategy on unannotated schemas")(
         """"<TYPE>"""" -> random,
         """{"type": "<TYPE>"}""" -> random
       )
 
-      aNumber("should generate a random Int when the random strategy is explicitly set")(
+      it("should generate a random Int when the random strategy is explicitly set")(
         """{"faker": "random"}""" -> random,
         """{"faker": {"faker": "random"}}""" -> random
       )
 
-      aNumber("should generate a random Int when the random strategy is unset")(
+      it("should generate a random Int when the random strategy is unset")(
         """{"faker": {}}""" -> random
       )
 
-      if (aNumber.isIntegral) {
-        aNumber("should allow configuring the random strategy with a minimum")(
+      if (it.isIntegral) {
+        it("should allow configuring the random strategy with a minimum")(
           """{"min": 0, "faker": "random"}""" -> withMinimum,
           """{"faker": {"min": 0}}""" -> withMinimum
         )
 
-        aNumber("should implicitly configure the random strategy from the schema annotations")(
+        it("should implicitly configure the random strategy from the schema annotations")(
           """{"min": 0}""" -> withMinimum
         )
 
-        aNumber("should override arguments from the schema annotations")(
+        it("should override arguments from the schema annotations")(
           """{"min": 100, "faker": {"min": 0}}""" -> withMinimum
         )
       } else {
-        aNumber("should allow configuring the random strategy with a minimum")(
+        it("should allow configuring the random strategy with a minimum")(
           """{"min": 0.5, "faker": "random"}""" -> withMinimum,
           """{"faker": {"min": 0.5}}""" -> withMinimum
         )
 
-        aNumber("should implicitly configure the random strategy from the schema annotations")(
+        it("should implicitly configure the random strategy from the schema annotations")(
           """{"min": 0.5}""" -> withMinimum
         )
 
-        aNumber("should override arguments from the schema annotations")(
+        it("should override arguments from the schema annotations")(
           """{"min": -0.5, "faker": {"min": 0.5}}""" -> withMinimum
         )
       }
 
-      aNumber("should be configurable by the min and the max")(
+      it("should be configurable by the min and the max")(
         """{"min": 0, "max": 256}""" -> byteSize,
         """{"faker": {"min": 0, "max": 256}}""" -> byteSize,
         """{"min": 0, "faker": {"max": 256}}""" -> byteSize,
@@ -241,33 +298,33 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
   randomStrategy(Tester.Float)
   randomStrategy(Tester.Double)
 
-  def gaussStrategy[T](aNumber: NumericTester[T]): Unit = {
-    describe(s"Generate ${aNumber.sType} with the gauss strategy") {
-      val stddev = if (aNumber.isIntegral) "100" else "1"
+  def gaussStrategy[T](it: NumericTester[T]): Unit = {
+    describe(s"Generate ${it.sType} with the gauss strategy") {
+      val stddev = if (it.isIntegral) "100" else "1"
 
       /** Expected results over the default gauss range */
-      val dflt = aNumber.sType match {
+      val dflt = it.sType match {
         case Schema.Type.INT | Schema.Type.LONG => Seq(80, -90, 208, 76, 98, -168, -2, 11, -39, -64)
         case _ =>
           Seq(0.8025330637390305, -0.9015460884175122, 2.080920790428163, 0.7637707684364894, 0.9845745328825128,
             -1.6834122587673428, -0.027290262907887285, 0.11524570286202315, -0.39016704137993785, -0.6433888131264491)
       }
 
-      val gauss100_10 = aNumber.sType match {
+      val gauss100_10 = it.sType match {
         case Schema.Type.INT | Schema.Type.LONG => Seq(108, 90, 120, 107, 109, 83, 99, 101, 96, 93)
         case _ =>
           Seq(108.02533063739031, 90.98453911582487, 120.80920790428164, 107.6377076843649, 109.84574532882513,
             83.16587741232658, 99.72709737092113, 101.15245702862023, 96.09832958620062, 93.5661118687355)
       }
 
-      val gauss100_10NonNeg = aNumber.sType match {
+      val gauss100_10NonNeg = it.sType match {
         case Schema.Type.INT | Schema.Type.LONG => Seq(108, 120, 107, 109, 101, 100, 105, 102, 114, 102)
         case _ =>
           Seq(108.02533063739031, 120.80920790428164, 107.6377076843649, 109.84574532882513, 101.15245702862023,
             100.52460907198835, 105.21342076929889, 102.60718194028357, 114.03147381720936, 102.71130617070202)
       }
 
-      aNumber(
+      it(
         "should generate between a bell curve of numbers centered around 0, with 95% of the values between -200 and 200"
       )(
         // These are all equivalent
@@ -283,7 +340,7 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
         s"""{"mean": 0, "faker": {"stddev": $stddev}}""" -> dflt
       )
 
-      aNumber(
+      it(
         "should generate numbers centered around 100, with 95% of the values between `80` and `120`, with possible negatives"
       )(
         // Note that it is *extremely* unlikely that a value outside 10 standard deviations would ever occur.
@@ -293,14 +350,14 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
         """{"faker": {"mean": 100, "stddev": 10}}""" -> gauss100_10
       )
 
-      aNumber(
+      it(
         "should generate numbers centered around 100, with 95% of the values between `80` and `120`, guaranteed no negatives"
       )(
         // But here it is impossible
         """{"min": 0, "faker": {"mean": 100, "stddev": 10}}""" -> gauss100_10
       )
 
-      aNumber("should apply a filter to only return numbers greater than the mean")(
+      it("should apply a filter to only return numbers greater than the mean")(
         """{"min": 100, "faker": {"mean": 100, "stddev": 10}}""" -> gauss100_10NonNeg
         // Be careful about setting a valid interval that is unlikely to have a generated number.  This next example
         // requires generated values to be 5 standard deviations from the main, so only one out of every million
@@ -314,44 +371,44 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
   gaussStrategy(Tester.Float)
   gaussStrategy(Tester.Double)
 
-  def sequenceStrategy[T](aNumber: NumericTester[T]): Unit = {
-    describe(s"Generate ${aNumber.sType} with the sequence strategy") {
+  def sequenceStrategy[T](it: NumericTester[T]): Unit = {
+    describe(s"Generate ${it.sType} with the sequence strategy") {
 
-      aNumber("should generate a simple sequence")(
+      it("should generate a simple sequence")(
         """{"faker": "sequence"}""" -> (0 to 9),
         """{"step": 1}""" -> (0 to 9)
       )
-      aNumber("should start from a specific value")(
+      it("should start from a specific value")(
         """{"start": 10000}""" -> (10000 to 10009)
       )
-      aNumber("should start from a specific value and step")(
+      it("should start from a specific value and step")(
         """{"start": 10, "step": 2}""" -> (10 to 28 by 2)
       )
-      aNumber("should count down with a negative step")(
+      it("should count down with a negative step")(
         """{"step": -1, "max": 4}""" -> Seq(3, 2, 1, 0, -1, -2),
         """{"step": -1, "min": 0, "max": 4}""" -> Seq(3, 2, 1, 0, 3, 2)
       )
-      aNumber("should look like a countdown down when you loop every step")(
+      it("should look like a countdown down when you loop every step")(
         """{"start": 3, "min": 0, "max": 4, "step": 3}""" -> Seq(3, 2, 1, 0, 3, 2)
       )
-      aNumber("should start from a specific value and loop")(
+      it("should start from a specific value and loop")(
         """{"min": 0,  "faker": {"start": 10, "max": 13}}""" -> Seq(10, 11, 12, 0, 1),
         """{"min": 0, "max": 13, "faker": {"start": 10}}""" -> Seq(10, 11, 12, 0, 1)
       )
 
-      if (aNumber.sType == Schema.Type.INT)
-        aNumber("should roll over at the default max value")(
+      if (it.sType == Schema.Type.INT)
+        it("should roll over at the default max value")(
           s"""{"step": 1, "start": ${Int.MaxValue - 5}}""" -> Seq(2147483642, 2147483643, 2147483644, 2147483645,
             2147483646, -2147483648, -2147483647, -2147483646, -2147483645, -2147483644)
         )
-      else if (aNumber.sType == Schema.Type.LONG)
-        aNumber("should roll over at the default max value")(
+      else if (it.sType == Schema.Type.LONG)
+        it("should roll over at the default max value")(
           s"""{"step": 1, "start": ${Long.MaxValue - 5}}""" -> Seq(9223372036854775802L, 9223372036854775803L,
             9223372036854775804L, 9223372036854775805L, 9223372036854775806L, -9223372036854775808L,
             -9223372036854775807L, -9223372036854775806L, -9223372036854775805L, -9223372036854775804L)
         )
-      else if (aNumber.sType == Schema.Type.FLOAT)
-        aNumber("should go to infinity at the default max value")(
+      else if (it.sType == Schema.Type.FLOAT)
+        it("should go to infinity at the default max value")(
           s"""{"step": ${Float.MaxValue * 0.01}, "start": ${Float.MaxValue * 0.95}}""" -> Seq(
             3.2326822e38,
             3.2667104e38,
@@ -365,8 +422,8 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
             Float.PositiveInfinity
           )
         )
-      else if (aNumber.sType == Schema.Type.DOUBLE)
-        aNumber("should go to infinity at the default max value")(
+      else if (it.sType == Schema.Type.DOUBLE)
+        it("should go to infinity at the default max value")(
           s"""{"step": ${Double.MaxValue * 0.01}, "start": ${Double.MaxValue * 0.95}}""" -> Seq(
             1.7078084781191998e308,
             1.725785409467823e308,
@@ -387,19 +444,19 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
   sequenceStrategy(Tester.Float)
   sequenceStrategy(Tester.Double)
 
-  def valueStrategy[T](aNumber: NumericTester[T]): Unit = {
-    describe(s"Generate ${aNumber.sType} with the value strategy") {
+  def valueStrategy[T](it: NumericTester[T]): Unit = {
+    describe(s"Generate ${it.sType} with the value strategy") {
 
-      aNumber("should generate a constant value")(
+      it("should generate a constant value")(
         // These are all equivalent
         """{"value": 123}""" -> Seq.fill(10)(123),
         """{"faker": 123}""" -> Seq.fill(10)(123),
         """{"faker": "value", "value": 123}""" -> Seq.fill(10)(123),
-        """{"value": 123.9}""" -> Seq.fill(10)(if (aNumber.isIntegral) 123 else 123.9),
-        """{"value": "123.1"}""" -> Seq.fill(10)(if (aNumber.isIntegral) 123 else 123.1)
+        """{"value": 123.9}""" -> Seq.fill(10)(if (it.isIntegral) 123 else 123.9),
+        """{"value": "123.1"}""" -> Seq.fill(10)(if (it.isIntegral) 123 else 123.1)
       )
 
-      aNumber("should apply the minimum and maximum to the constant value")(
+      it("should apply the minimum and maximum to the constant value")(
         """{"min": 0, "value": 123}""" -> Seq.fill(10)(123),
         """{"min": 234, "value": 123}""" -> Seq.fill(10)(234),
         """{"max": 0, "value": 123}""" -> Seq.fill(10)(0),
@@ -407,8 +464,8 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
       )
 
       for (maxValue <- Seq("256", "256.1", "256.999")) {
-        val expected = Seq.fill(10)(if (aNumber.isIntegral) 256 else maxValue)
-        aNumber(s"should support the max and min value: $maxValue and \"$maxValue\"")(
+        val expected = Seq.fill(10)(if (it.isIntegral) 256 else maxValue)
+        it(s"should support the max and min value: $maxValue and \"$maxValue\"")(
           s"""{"value": 999, "max": $maxValue}""" -> expected,
           s"""{"value": 999, "max": "$maxValue"}""" -> expected,
           s"""{"value": 123, "min": $maxValue}""" -> expected,
@@ -422,62 +479,75 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
   valueStrategy(Tester.Float)
   valueStrategy(Tester.Double)
 
-  describe("Generate INT with the oneof strategy") {
-    it("should pick a random value between 123, 234 and 345") {
-      // These are all equivalent
-      val expected = Seq(123, 234, 234, 345, 345, 345, 345, 123, 123, 345)
-      Tester.Int.generate("""{"type": "int", "faker": [123, 234, 345]}""").take(10) shouldBe expected
-      Tester.Int.generate("""{"type": "int", "oneof": [123, 234, 345]}""").take(10) shouldBe expected
-    }
+  def oneofStrategy[T](it: NumericTester[T]): Unit = {
+    describe(s"Generate ${it.sType} with the oneof strategy") {
 
-    it("should pick randomly between a single digit and 999") {
-      Tester.Int.generate("""{"type": "int", "faker": [999, {"min": 0, "max": 9}]}""").take(10) shouldBe Seq(7, 999, 8,
-        999, 3, 2, 999, 999, 999, 8)
-    }
+      /** Expected results when picking from a list of values. */
+      val values = Seq(123, 234, 234, 345, 345, 345, 345, 123, 123, 345)
 
-    it("should always generate 123") {
-      val expected = Seq.fill(10)(123)
-      Tester.Int.generate("""{"type": "int", "oneof": [123, 321, 999], "index": 0}""").take(10) shouldBe expected
-      Tester.Int.generate("""{"type": "int", "oneof": 123}""").take(10) shouldBe expected
-      Tester.Int.generate("""{"type": "int", "oneof": [123, 321, 999], "index": -1}""").take(10) shouldBe expected
-    }
-
-    it("should cycle through the elements") {
-      Tester.Int.generate("""{"type": "int", "oneof": [123, 321, 999], "index": {"step": 1}}""").take(10) shouldBe
-        Seq(123, 321, 999, 123, 321, 999, 123, 321, 999, 123)
-    }
-
-    it("should pick a gaussian distribution of elements") {
-      Tester.Int
-        .generate("""{"type": "int", "oneof": [1,2,3,4,5], "index": {"mean": 2.5, "stddev": 1}}""")
-        .take(1000)
-        .groupBy(identity)
-        .view
-        .mapValues(_.size)
-        .toMap shouldBe Map(1 -> 86, 2 -> 207, 3 -> 386, 4 -> 251, 5 -> 70)
-    }
-  }
-
-  describe("Generate INT with aggregate strategies") {
-    it("should sum values from multiple strategies") {
-      Tester.Int.generate("""{"type": "int", "sumof": [1,2,3,4,5], "faker": "sumof"}""").take(10) shouldBe Seq.fill(10)(
-        15
+      it("should pick a random value between 123, 234 and 345")(
+        // These are all equivalent
+        """{"faker": [123, 234, 345]}""" -> values,
+        """{"oneof": [123, 234, 345]}""" -> values
       )
-      Tester.Int.generate("""{"type": "int", "sumof": [1,2,3,4,5]}""").take(10) shouldBe Seq.fill(10)(15)
-    }
-    it("should multiply values from multiple strategies") {
-      Tester.Int.generate("""{"type": "int", "productof": [1,2,3,4,5]}""").take(10) shouldBe Seq.fill(10)(120)
-    }
-    it("should find the minimum from multiple strategies") {
-      Tester.Int.generate("""{"type": "int", "minof": [1,2,3,4,5]}""").take(10) shouldBe Seq.fill(10)(1)
-    }
-    it("should find the maximum from multiple strategies") {
-      Tester.Int.generate("""{"type": "int", "maxof": [1,2,3,4,5]}""").take(10) shouldBe Seq.fill(10)(5)
-    }
-    it("should find the average from multiple strategies") {
-      Tester.Int.generate("""{"type": "int", "meanof": [1,2,3,4,5]}""").take(10) shouldBe Seq.fill(10)(3)
+
+      /** Expected results when picking from a list of values. */
+      val multistrategy =
+        if (it.isIntegral) Seq(7, 999, 8, 999, 3, 2, 999, 999, 999, 8)
+        else
+          Seq(7.48296889908355, 5.736756828150974, 1.053059479265026, 2.9989655952898477, 999.0, 8.863573861798281,
+            0.20773667799297957, 999.0, 999.0, 999.0)
+
+      it("should pick randomly between a single digit and 999")(
+        """{"faker": [999, {"min": 0, "max": 9}]}""" -> multistrategy
+      )
+
+      it("should always generate 123")(
+        """{"oneof": [123, 321, 999], "index": 0}""" -> Seq.fill(10)(123),
+        """{"oneof": 123}""" -> Seq.fill(10)(123),
+        """{"oneof": [123, 321, 999], "index": -1}""" -> Seq.fill(10)(123)
+      )
+
+      it("should cycle through the elements")(
+        """{"oneof": [123, 321, 999], "index": {"step": 1}}""" -> Seq(123, 321, 999, 123, 321, 999, 123, 321, 999, 123)
+      )
+
+      it("should pick a gaussian distribution of elements").apply(
+        """{"oneof": [1,2,3,4,5], "index": {"mean": 2.5, "stddev": 1}}""",
+        new it.Dist(1 -> 86, 2 -> 207, 3 -> 386, 4 -> 251, 5 -> 70)
+      )
     }
   }
+  oneofStrategy(Tester.Int)
+  oneofStrategy(Tester.Long)
+  oneofStrategy(Tester.Float)
+  oneofStrategy(Tester.Double)
+
+  def aggregateStrategies[T](it: NumericTester[T]): Unit = {
+    describe(s"Generate ${it.sType} with other aggregate strategies") {
+
+      it("should sum values from multiple strategies")(
+        """{"sumof": [1,2,3,4,5], "faker": "sumof"}""" -> Seq.fill(10)(15),
+        """{"sumof": [1,2,3,4,5]}""" -> Seq.fill(10)(15)
+      )
+      it("should multiply values from multiple strategies")(
+        """{"productof": [1,2,3,4,5]}""" -> Seq.fill(10)(120)
+      )
+      it("should find the minimum from multiple strategies")(
+        """{"minof": [1,2,3,4,5]}""" -> Seq.fill(10)(1)
+      )
+      it("should find the maximum from multiple strategies")(
+        """{"maxof": [1,2,3,4,5]}""" -> Seq.fill(10)(5)
+      )
+      it("should find the average from multiple strategies")(
+        """{"meanof": [1,2,3,4,5]}""" -> Seq.fill(10)(3)
+      )
+    }
+  }
+  aggregateStrategies(Tester.Int)
+  aggregateStrategies(Tester.Long)
+  aggregateStrategies(Tester.Float)
+  aggregateStrategies(Tester.Double)
 
   describe("Generating Avro RECORD data") {
     it("should create ten character strings by default") {
