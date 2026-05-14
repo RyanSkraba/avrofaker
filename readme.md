@@ -17,7 +17,7 @@ for (_ <- 0 to 10) print(s"${faker()} ")
 
 Every schema and subschema can be annotated, so you can create awesome, customizable fake data for testing!
 
-Specification :warning: **DRAFT** :warning: **DRAFT** :warning: **DRAFT** :warning: This spec hasn't been implemented yet, the logic is still being worked out.
+Specification
 ==============================================================================
 
 Annotations are added to an Avro schema (also sometimes known as JSON properties).
@@ -75,18 +75,18 @@ This strategy has the following arguments:
 - `max` to specify the upper bounds (exclusive) of the generated value (default: `2147483647`).
   Note that this means that `2147483647` will not be generated.
 
-| Schema                                            | Summary                                                                                          |
-|---------------------------------------------------|--------------------------------------------------------------------------------------------------|
-| `"int"`                                           | Uniformly generates a random 32 bit whole number from `-2147483648` to `2147483646`.             |
-| `{"type": "int"}`                                 | :arrow_up: Avro equivalent.                                                                      |
-| `{"type": "int", "faker": "random"}`              | :arrow_up: Equivalent.                                                                           |
-| `{"type": "int", "faker": {}}`                    | :arrow_up: Equivalent, but useless                                                               |
-| `{"type": "int", "faker": {"faker": "random"}}`   | :arrow_up: Equivalent, but useless.                                                              |
-| `{"type": "int", "faker": "random", "min": 0}`    | Uniformly generates a random 32 bit whole number from 0 to `2147483646`.                         |
-| `{"type": "int", "min": 0}`                       | :arrow_up: Equivalent.                                                                           |
-| `{"type": "int", "faker": {"min": 0}}`            | :arrow_up: Equivalent.                                                                           |
-| `{"type": "int", "min": 100, faker": {"min": 0}}` | :arrow_up: Equivalent, because the `min` argument is ignored from the parent when it's supplied. |
-| `{"type": "int", "min": 0, "max": 256}`           | :Uniformly generates a number from `0` to `255`                                                  |
+| Schema                                             | Summary                                                                                          |
+|----------------------------------------------------|--------------------------------------------------------------------------------------------------|
+| `"int"`                                            | Uniformly generates a random 32 bit whole number from `-2147483648` to `2147483646`.             |
+| `{"type": "int"}`                                  | :arrow_up: Avro equivalent.                                                                      |
+| `{"type": "int", "faker": "random"}`               | :arrow_up: Equivalent.                                                                           |
+| `{"type": "int", "faker": {}}`                     | :arrow_up: Equivalent, but useless                                                               |
+| `{"type": "int", "faker": {"faker": "random"}}`    | :arrow_up: Equivalent, but useless.                                                              |
+| `{"type": "int", "faker": "random", "min": 0}`     | Uniformly generates a random 32 bit whole number from 0 to `2147483646`.                         |
+| `{"type": "int", "min": 0}`                        | :arrow_up: Equivalent.                                                                           |
+| `{"type": "int", "faker": {"min": 0}}`             | :arrow_up: Equivalent.                                                                           |
+| `{"type": "int", "min": 100, "faker": {"min": 0}}` | :arrow_up: Equivalent, because the `min` argument is ignored from the parent when it's supplied. |
+| `{"type": "int", "min": 0, "max": 256}`            | :Uniformly generates a number from `0` to `255`                                                  |
 
 ### The **gauss** strategy with `INT`
 
@@ -177,19 +177,20 @@ This strategy has the following arguments (bolded arguments auto-select the stra
 - **`index`** to specify which index to use to pick the strategy (default: Uniformly distributed among the possible indices)
   If the `index` is a generator, it has an implicit `min` and `max` corresponding to the size of the array.
 
-| Schema                                                                                | Summary                                                                                       |
-|---------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------|
-| `{"type": "int", "faker": [123, 234, 345]}`                                           | Randomly picks `123`, `234` or `345`.                                                         |
-| `{"type": "int", "oneof": [123, 234, 345]}`                                           | :arrow_up: Equivalent, but implicitly selects the strategy.                                   |
-| `{"type": "int", "faker": [999, {"min": 0, "max": 9}]}`                               | Picks `999` 50% of the time, and a single digit number the other 50%.                         |
-| `{"type": "int", "oneof": [123, 321, 999], "index": 0}`                               | Always generates `123`.                                                                       |
-| `{"type": "int", "oneof": [123, 321, 999], "index": -1}`                              | :arrow_up: Equivalent, the implicit `min` on the index forces it to `0`.                      |
-| `{"type": "int", "oneof": [123, 321, 999], "index": {"step": 1}}`                     | The index is a sequence `0`,`1`,`2`,`0`,`1`, etc, so alternates `123`,`321`,`999`,`123`, etc. |
-| `{"type": "int", "oneof": [1,2,3,4,5], "index": {"gauss": {"mean": 2, "stddev": 1}}}` | Picks the numbers `1`,`2`,`3`,`4`,`5` in a rough bell curve.                                  |
+| Schema                                                                                  | Summary                                                                                       |
+|-----------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------|
+| `{"type": "int", "faker": [123, 234, 345]}`                                             | Randomly picks `123`, `234` or `345`.                                                         |
+| `{"type": "int", "oneof": [123, 234, 345]}`                                             | :arrow_up: Equivalent, but implicitly selects the strategy.                                   |
+| `{"type": "int", "faker": [999, {"min": 0, "max": 9}]}`                                 | Picks `999` 50% of the time, and a single digit number the other 50%.                         |
+| `{"type": "int", "oneof": [123, 321, 999], "index": 0}`                                 | Always generates `123`.                                                                       |
+| `{"type": "int", "oneof": [123, 321, 999], "index": -1}`                                | :arrow_up: Equivalent, the implicit `min` on the index forces it to `0`.                      |
+| `{"type": "int", "oneof": [123, 321, 999], "index": {"step": 1}}`                       | The index is a sequence `0`,`1`,`2`,`0`,`1`, etc, so alternates `123`,`321`,`999`,`123`, etc. |
+| `{"type": "int", "oneof": [1,2,3,4,5], "index": {"gauss": {"mean": 2.5, "stddev": 1}}}` | Picks the numbers `1`,`2`,`3`,`4`,`5` in a rough bell curve.                                  |
 
 ### Other aggregate strategies like **oneof** strategy for an `INT`
 
-The following strategies work like **oneof** (without the `index` argument).  They each have an argument that is the same as their strategy name, but applies to all of the values in the JSON array.
+The following strategies work like **oneof** (without the `index` argument).  
+They each have an argument that is the same as their strategy name, but applies to all of the values in the JSON array.
 
 - **sumof** uses every element of the array is used to generate an integer and the sum is returned.  
   Be careful about inheriting `min` and `max`, since they apply to *each* generated integer separately.
@@ -213,9 +214,134 @@ Generating `LONG`, `FLOAT` and `DOUBLE` data
 The same rules and strategies apply to the other numerical types, using their respective bounds and precision in Java.
 
 Notes:
-- The default `min` and `max` for **random** `FLOAT` and `DOUBLE` are `0.0` and `1.0` (not their minimum and maximum values).  Likewise, the default `mean` and `stddev` are `0.0` and `1.0`. 
-- The default `min` and `max` for floating point **sequence** are their minimum and maximum values.
+- The default `min` and `max` for **random** `FLOAT` and `DOUBLE` are `0.0` and `1.0` (not their minimum and maximum values).
+  Likewise, the default `mean` and `stddev` are `0.0` and `1.0`. 
+- The default `min` and `max` for a floating point **sequence** are their minimum and maximum values.
 - Where values are truncated for whole numbers, they are retained with as much precision as possible for floating point values.
+
+Generating `String` data
+------------------------------------------------------------------------------
+
+:warning: **DRAFT** :warning: **DRAFT** :warning: **DRAFT** :warning: This spec hasn't been implemented yet, the logic is still being worked out.
+
+### The **random** strategy with `STRING`
+
+The default strategy (without any annotation, or by setting `faker` to `random`) generates a random 10 character alphanumeric string.
+
+This strategy has the following argument:
+
+- `size` to specify the lower bounds (inclusive) of the generated value (default: `10`).
+
+| Schema                                                         | Summary                                                                                           |
+|----------------------------------------------------------------|---------------------------------------------------------------------------------------------------|
+| `"string"`                                                     | Uniformly generates 10 character alphanumeric strings.                                            |
+| `{"type": "string"}`                                           | :arrow_up: Avro equivalent.                                                                       |
+| `{"type": "string", "faker": "random"}`                        | :arrow_up: Equivalent.                                                                            |
+| `{"type": "string", "faker": {}}`                              | :arrow_up: Equivalent, but useless                                                                |
+| `{"type": "string", "faker": {"faker": "random"}}`             | :arrow_up: Equivalent, but useless.                                                               |
+| `{"type": "string", "size": {"min": 5, "max": 10}}`            | Uniformly generates a random string with a size bounded from `5` (inclusive) to `10` (exclusive). |
+| `{"type": "string", "max": 5, "size": {"max": 10}}`            | :arrow_up: Equivalent, because the `min` argument is taken from the parent.                       |
+| `{"type": "string", "max": 100, "size": {"min": 5, max": 10}}` | :arrow_up: Equivalent, because the `min` argument is ignored from the parent when it's supplied.  |
+| `{"type": "string", "max": 5, "max": 10, size": {}}`           | :arrow_up: Equivalent, because both arguments are taken from the parent.                          |
+| `{"type": "string", "max": 5, "max": 10}`                      | Uniformly generates 10 character alphanumeric strings (the default `size` is used).               |
+
+### The **value** and **oneof** strategy with `STRING`
+
+These two strategies both apply to `STRING` data as in `INT` data 
+- with **value** you can specify a values or a set of values to choose from randomly, and 
+- **oneof** allows you to select from the set using an `INT` generator in the `index` argument.
+
+| Schema                                                                                                   | Summary                                                                                                 |
+|----------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------|
+| `{"type": "string", "faker": "value", "value": "Hello"}`                                                 | Always generates `"Hello"`                                                                              |
+| `{"type": "string", "faker": "Hello"}`                                                                   | :arrow_up: Equivalent, but implicitly selects the strategy.                                             |
+| `{"type": "string", "value": "Hello"}`                                                                   | :arrow_up: Equivalent                                                                                   |
+| `{"type": "string", "faker": ["Hello", "Bonjour"}`                                                       | Randomly picks `"Hello"` or `Bonjour`.                                                                  |
+| `{"type": "string", "value": ["Hello", "Bonjour"}`                                                       | :arrow_up: Equivalent                                                                                   |
+| `{"type": "string", "oneof": ["Hello", "Bonjour"}`                                                       | :arrow_up: Equivalent                                                                                   |
+| `{"type": "string", "faker": "oneof", "oneof": ["Hello", "Bonjour"}`                                     | Equivalent, but explicitly selects the strategy.                                                        |
+| `{"type": "string", "faker": ["X", {"min": 0, "max": 9}]}`                                               | Picks `"X"` 50% of the time, and a single digit character string the other 50%.                         |
+| `{"type": "string", "oneof": ["A", "B", "C"], "index": 0}`                                               | Always generates "A".                                                                                   |
+| `{"type": "string", "oneof": ["A", "B", "C"], "index": -1}`                                              | :arrow_up: Equivalent, the implicit `min` on the index forces it to `0`.                                |
+| `{"type": "string", "oneof": ["A", "B", "C"], "index": {"step": 1}}`                                     | The index is a sequence `0`,`1`,`2`,`0`,`1`, etc, so alternates `"A"`, `"B"`, `"C"`, `"A"`, `"B"`, etc. |
+| `{"type": "string", "oneof": ["A", "B", "C", "D", "E"], "index": {"gauss": {"mean": 2.5, "stddev": 1}}}` | Picks the strings `"A"`, `"B"`, `"C"`, `"D"`, `"E"` in a rough bell curve.                              |
+
+### The **expression** strategy with `STRING`
+
+The AvroFaker library wraps [DataFaker](https://github.com/datafaker-net/datafaker) and uses it to generate strings with the **expression** strategy.
+
+This strategy has the following argument (which auto-selects the strategy if no other has been explicitly selected):
+
+- **`expression`** to specify the [DataFaker expression](https://www.datafaker.net/documentation/expressions/) to use in generation.
+
+| Schema                                                                          | Summary                                                     |
+|---------------------------------------------------------------------------------|-------------------------------------------------------------|
+| `{"type": "string", "faker": "expression", "expression": "#{numerify '####'}"}` | Generates four digit numbers using DataFaker                |
+| `{"type": "string", "expression": "#{numerify '####'}"}`                        | :arrow_up: Equivalent, but implicitly selects the strategy. |
+| `{"type": "string", "expression": ""#{letterify 'key-?????'}"}`                 | Generates 5 letter random words: `"key-lvxts"`              |
+| `{"type": "string", "expression": ""#{Name.first_name} #{Name.last_name}"}`     | Generates names: `"Kit Graham"`                             |
+| `#{Address.street_address}\n#{Address.city}, #{Address.country}`                | Generates a three line address.                             |
+
+Generating `ARRAY` data
+------------------------------------------------------------------------------
+
+:warning: **DRAFT** :warning: **DRAFT** :warning: **DRAFT** :warning: This spec hasn't been implemented yet, the logic is still being worked out.
+
+Generates an array of 3-5 elements (according to it's annotated element type)
+
+Generating `MAP` data
+------------------------------------------------------------------------------
+
+:warning: **DRAFT** :warning: **DRAFT** :warning: **DRAFT** :warning: This spec hasn't been implemented yet, the logic is still being worked out.
+
+Generates an map of 3-5 elements with a random 10 character key and the value (according to it's annotated value type)
+
+Generating `BYTES` data
+------------------------------------------------------------------------------
+
+:warning: **DRAFT** :warning: **DRAFT** :warning: **DRAFT** :warning: This spec hasn't been implemented yet, the logic is still being worked out.
+
+Generates 5 to 10 bytes.
+
+Generating `FIXED` data
+------------------------------------------------------------------------------
+
+:warning: **DRAFT** :warning: **DRAFT** :warning: **DRAFT** :warning: This spec hasn't been implemented yet, the logic is still being worked out.
+
+Random bytes of the right size.
+
+Generating `ENUM` data
+------------------------------------------------------------------------------
+
+:warning: **DRAFT** :warning: **DRAFT** :warning: **DRAFT** :warning: This spec hasn't been implemented yet, the logic is still being worked out.
+
+Randomly picks a symbol.
+
+Generating `UNION` data
+------------------------------------------------------------------------------
+
+:warning: **DRAFT** :warning: **DRAFT** :warning: **DRAFT** :warning: This spec hasn't been implemented yet, the logic is still being worked out.
+
+Generates one of the values, uniformly picking one randomly.
+
+Generating `BOOLEAN` data
+------------------------------------------------------------------------------
+
+:warning: **DRAFT** :warning: **DRAFT** :warning: **DRAFT** :warning: This spec hasn't been implemented yet, the logic is still being worked out.
+
+Generates `true` or `false`, uniformly picking one randomly.
+
+Generating `NULL` data
+------------------------------------------------------------------------------
+
+There is no strategy to generate `NULL` data: it's always `null`.
+
+Generating `RECORD` data
+------------------------------------------------------------------------------
+
+:warning: **DRAFT** :warning: **DRAFT** :warning: **DRAFT** :warning: This spec hasn't been implemented yet, the logic is still being worked out.
+
+Generates a GenericRecord with a field for each according to its annotated type.
 
 Using
 ------------------------------------------------------------------------------
