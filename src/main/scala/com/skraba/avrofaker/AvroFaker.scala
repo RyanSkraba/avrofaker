@@ -45,6 +45,7 @@ object AvroFaker {
   val StrategyMinOf: String = "minof"
   val StrategyMaxOf: String = "maxof"
   val StrategyMeanOf: String = "meanof"
+  val StrategyExpression: String = "expression"
 
   // Arguments are used to configure strategies
   val ArgMin: String = "min"
@@ -55,10 +56,9 @@ object AvroFaker {
   val ArgStart: String = "start"
   val ArgIndex: String = "index"
   val ArgLength: String = "length"
-  val ArgExpression: String = "faker"
 
   // This is the list of arguments that, if present, imply that the given strategy should be used
-  val ArgToImplicitStrategyMap = ListMap(
+  val NumberArgToImplicitStrategy = ListMap(
     ArgMean -> StrategyGauss,
     ArgStddev -> StrategyGauss,
     ArgStart -> StrategySequence,
@@ -72,6 +72,13 @@ object AvroFaker {
     StrategyMeanOf -> StrategyMeanOf
   )
 
+  // This is the list of arguments that, if present, imply that the given strategy should be used
+  val StringArgToImplicitStrategy = ListMap(
+    StrategyValue -> StrategyValue,
+    StrategyExpression -> StrategyExpression,
+    StrategyOneOf -> StrategyOneOf
+  )
+
   def apply(schema: Schema): AvroFaker[_] = {
     schema.getType match {
       case Schema.Type.RECORD  => RecordGenerator(schema)
@@ -80,7 +87,7 @@ object AvroFaker {
       case Schema.Type.MAP     => MapGenerator(schema)
       case Schema.Type.UNION   => UnionGenerator(schema)
       case Schema.Type.FIXED   => FixedGenerator(schema)
-      case Schema.Type.STRING  => StringGenerator(schema)
+      case Schema.Type.STRING  => StringFaker(getArgs(schema))
       case Schema.Type.BYTES   => BytesGenerator(schema)
       case Schema.Type.INT     => IntFaker(getArgs(schema))
       case Schema.Type.LONG    => LongFaker(getArgs(schema))
@@ -112,7 +119,7 @@ object AvroFaker {
     * handle Integers just in case they are explicitly set.
     */
   def toNumOption[T](value: Any)(implicit num: Numeric[T]): Option[T] = {
-    val pass1: Option[T] = Option((num, value)).collect {
+    val pass1: Option[Any] = Option((num, value)).collect {
       case (_, b: Byte)                       => num.fromInt(b)
       case (_, s: Short)                      => num.fromInt(s)
       case (_, i: Int)                        => num.fromInt(i)
@@ -127,16 +134,18 @@ object AvroFaker {
       case (_: IntIsIntegral, d: Double)      => d.toInt
     }
 
-    pass1.orElse(
-      Option((num, value)).flatMap {
-        case (dnum: DoubleIsFractional, s: String) => dnum.parseString(s)
-        case (lnum: LongIsIntegral, s: String) =>
-          lnum.parseString(s).orElse(DoubleIsFractional.parseString(s).map(_.toLong))
-        case (inum: IntIsIntegral, s: String) =>
-          inum.parseString(s).orElse(DoubleIsFractional.parseString(s).map(_.toInt))
-        case _ => None
-      }
-    )
+    pass1
+      .orElse(
+        Option((num, value)).flatMap {
+          case (dnum: DoubleIsFractional, s: String) => dnum.parseString(s)
+          case (lnum: LongIsIntegral, s: String) =>
+            lnum.parseString(s).orElse(DoubleIsFractional.parseString(s).map(_.toLong))
+          case (inum: IntIsIntegral, s: String) =>
+            inum.parseString(s).orElse(DoubleIsFractional.parseString(s).map(_.toInt))
+          case _ => None
+        }
+      )
+      .asInstanceOf[Option[T]]
   }
 
   def toNum[T](value: Any)(implicit num: Numeric[T]): T = {
@@ -168,11 +177,7 @@ object AvroFaker {
     if (key == ArgMin && value.isEmpty) return ConstantFaker(bounds._1)
     if (key == ArgMax && value.isEmpty) return ConstantFaker(bounds._2)
 
-    // Try to create a constant generator from the argument.
-    val constantFn: Option[AvroFaker[T]] = value.flatMap(toNumOption(_)(num)).collect { ConstantFaker(_) }
-    if (constantFn.nonEmpty) return constantFn.get
-
-    // Otherwise, get any explicitly matched strategies
+    // Get any explicitly specified strategy.
     val explicitFn: Option[AvroFaker[T]] = args.get(key) collect {
       case StrategyRandom   => RandomFaker(bounds, args)
       case StrategyGauss    => DoubleGaussFaker(bounds, args)
@@ -195,11 +200,15 @@ object AvroFaker {
     }
     if (explicitFn.nonEmpty) return explicitFn.get
 
+    // Otherwise try to create a constant generator from the argument.
+    val constantFn: Option[AvroFaker[T]] = value.flatMap(toNumOption(_)(num)).collect { ConstantFaker(_) }
+    if (constantFn.nonEmpty) return constantFn.get
+
     // Otherwise try and get a strategy based on the property and explicitly specify it.
     if (key == ArgFaker && !args.contains(key)) {
-      val implicitFn: Option[Map[String, String]] = ArgToImplicitStrategyMap.keys
+      val implicitFn: Option[Map[String, String]] = NumberArgToImplicitStrategy.keys
         .find(args.contains)
-        .map(k => Map(key -> ArgToImplicitStrategyMap.apply(k)))
+        .map(k => Map(key -> NumberArgToImplicitStrategy.apply(k)))
       if (implicitFn.nonEmpty) return fake(bounds, args ++ implicitFn.get, key, dflt)(num)
     }
 
@@ -269,7 +278,7 @@ case class ArrayGenerator(schema: Schema) extends AvroFaker[Array[Any]] {
   *   a schema of type MAP
   */
 case class MapGenerator(schema: Schema) extends AvroFaker[Map[String, Any]] {
-  private val kFn: StringGenerator = StringGenerator(schema)
+  private val kFn: AvroFaker[String] = StringFaker.fake(Map.empty, ArgFaker)
   private val vFn: AvroFaker[?] = AvroFaker(schema.getValueType)
   def apply(ctx: FakerContext): Map[String, Any] =
     Array.fill(2 + ctx.rnd.nextInt(3))(kFn.apply(ctx) -> vFn.apply(ctx)).toMap
@@ -296,39 +305,89 @@ case class FixedGenerator(schema: Schema) extends AvroFaker[Array[Byte]] {
   def apply(ctx: FakerContext): Array[Byte] = ctx.rnd.nextBytes(schema.getFixedSize)
 }
 
+/** A faker that generates a random string. */
+private[this] case class StringRandomFaker(args: Map[String, Any]) extends AvroFaker[String] {
+  val lengthFn: FakerContext => Long = fake[Long]((0, Int.MaxValue), args, ArgLength, 10)
+  def apply(ctx: FakerContext): String = ctx.rnd.alphanumeric.take(lengthFn(ctx).toInt).mkString
+}
+
+/** A faker that generates a random string. */
+private[this] case class StringExpressionFaker(args: Map[String, Any]) extends AvroFaker[String] {
+  val expressionFn: AvroFaker[String] = StringFaker.fake(args, StrategyExpression, "#{examplify 'A999'}")
+  var faker: Option[Faker] = None
+  def apply(ctx: FakerContext): String = {
+    if (faker.isEmpty) faker = Some(new Faker(new java.util.Random(ctx.rnd.nextLong())))
+    faker.get.expression(expressionFn(ctx))
+  }
+}
+
 /** A STRING schema generator
   *
   * @param schema
   *   a schema of type STRING
   */
-case class StringGenerator(schema: Schema) extends AvroFaker[String] {
-  private val fn =
-    if (schema.propsContainsKey(ArgExpression))
-      StringFakerGenerator(schema.getProp(ArgExpression))
-    else
-      StringRandomGenerator(length = fake((Long.MinValue, Long.MaxValue), getArgs(schema), ArgLength, 10))
-
+case class StringFaker(args: Map[String, Any]) extends AvroFaker[String] {
+  private val fn = StringFaker.fake(args, ArgFaker)
   def apply(ctx: FakerContext): String = fn.apply(ctx)
+}
 
-  /** Generates a random string of the expected length
-    *
-    * @param length
-    *   the size of the string to generate
-    */
-  private[this] case class StringRandomGenerator(length: FakerContext => Long) extends AvroFaker[String] {
-    def apply(ctx: FakerContext): String = ctx.rnd.alphanumeric.take(length(ctx).toInt).mkString
-  }
+object StringFaker {
+  def fake(args: Map[String, Any], key: String, dflt: Any = Map(ArgFaker -> StrategyRandom)): AvroFaker[String] = {
 
-  /** Uses Faker to generate a string
-    *
-    * @param expression
-    *   the Faker expression to generate
-    */
-  private[this] case class StringFakerGenerator(expression: String) extends AvroFaker[String] {
-    var faker: Option[Faker] = None
-    def apply(ctx: FakerContext): String = {
-      if (faker.isEmpty) faker = Some(new Faker(new java.util.Random(ctx.rnd.nextLong())))
-      faker.get.expression(expression)
+    // Get the key from the args or defaults
+    val value: Option[Any] = args.get(key)
+
+    // Get any explicitly specified strategy.
+    val explicitFn: Option[AvroFaker[String]] = args.get(key) collect {
+      case StrategyRandom     => StringRandomFaker(args)
+      case StrategyValue      => fake(args, StrategyValue)
+      case StrategyExpression => StringExpressionFaker(args)
+      case StrategyOneOf =>
+        fake(args, args(key).toString, dflt) match {
+          case RandomOneOfFaker(fns) =>
+            args(key) match {
+              case StrategyOneOf => OneOfFaker(args, fns)
+            }
+          case other => other
+        }
+    }
+    if (explicitFn.nonEmpty) return explicitFn.get
+
+    // Otherwise try to create a constant generator from the argument.
+    val constantFn: Option[String] = value collect {
+      case b: Byte   => b.toString
+      case s: Short  => s.toString
+      case i: Int    => i.toString
+      case l: Long   => l.toString
+      case f: Float  => f.toString
+      case d: Double => d.toString
+      case s: String => s
+    }
+    if (constantFn.nonEmpty) return ConstantFaker(constantFn.get)
+
+    // Otherwise try and get a strategy based on the property and explicitly specify it.
+    if (key == ArgFaker && !args.contains(key)) {
+      val implicitFn: Option[Map[String, String]] = StringArgToImplicitStrategy.keys
+        .find(args.contains)
+        .map(k => Map(key -> StringArgToImplicitStrategy.apply(k)))
+      if (implicitFn.nonEmpty) return fake(args ++ implicitFn.get, key, dflt)
+    }
+
+    // Otherwise, interpret the strategy depending on its type
+    value match {
+      case Some(m: Map[_, _]) =>
+        // A map, or object, adds attributes to the strategy that can complete how it is interpreted.
+        val mm = m.asInstanceOf[Map[String, Any]]
+        fake(args.removed(key).removed(ArgFaker) ++ m.asInstanceOf[Map[String, Any]], ArgFaker, dflt)
+      case Some(xs: Iterable[_]) =>
+        // An array is, by default, a list of strategies that we randomly pick one from.
+        RandomOneOfFaker(xs.map(v => fake(args ++ Map(key -> v), key, dflt)).toSeq)
+      case None =>
+        // We fall back to the default value.
+        fake(args ++ Map(key -> dflt), key, 0)
+      case Some(unknown) =>
+        // This should never occur in our processing
+        throw new IllegalArgumentException(s"Unknown argument content: $unknown")
     }
   }
 }
@@ -450,10 +509,10 @@ private[this] case class DoubleGaussFaker[T](bounds: (T, T), args: Map[String, A
     case _                => 100.0
   }
 
-  val min = fake[Double]((Double.NegativeInfinity, Double.PositiveInfinity), args, ArgMin, bounds._1)
-  val max = fake[Double]((Double.NegativeInfinity, Double.PositiveInfinity), args, ArgMax, bounds._2)
-  val mean = fake[Double]((Double.NegativeInfinity, Double.PositiveInfinity), args, ArgMean, 0)
-  val stddev = fake[Double]((Double.NegativeInfinity, Double.PositiveInfinity), args, ArgStddev, defaultStddev)
+  private val min = fake[Double]((Double.NegativeInfinity, Double.PositiveInfinity), args, ArgMin, bounds._1)
+  private val max = fake[Double]((Double.NegativeInfinity, Double.PositiveInfinity), args, ArgMax, bounds._2)
+  private val mean = fake[Double]((Double.NegativeInfinity, Double.PositiveInfinity), args, ArgMean, 0)
+  private val stddev = fake[Double]((Double.NegativeInfinity, Double.PositiveInfinity), args, ArgStddev, defaultStddev)
 
   def apply(ctx: FakerContext): T = {
     val vMin = min(ctx)

@@ -230,20 +230,22 @@ The default strategy (without any annotation, or by setting `faker` to `random`)
 
 This strategy has the following argument:
 
-- `size` to specify the lower bounds (inclusive) of the generated value (default: `10`).
+- `length` to specify the lower bounds (inclusive) of the generated value (default: `10`).
+- `min` to specify the lower bounds (inclusive) of the generated value (default: `0`, constrainted to non-negative).
+- `max` to specify the lower bounds (inclusive) of the generated value (default: **TODO**).
 
-| Schema                                                         | Summary                                                                                           |
-|----------------------------------------------------------------|---------------------------------------------------------------------------------------------------|
-| `"string"`                                                     | Uniformly generates 10 character alphanumeric strings.                                            |
-| `{"type": "string"}`                                           | :arrow_up: Avro equivalent.                                                                       |
-| `{"type": "string", "faker": "random"}`                        | :arrow_up: Equivalent.                                                                            |
-| `{"type": "string", "faker": {}}`                              | :arrow_up: Equivalent, but useless                                                                |
-| `{"type": "string", "faker": {"faker": "random"}}`             | :arrow_up: Equivalent, but useless.                                                               |
-| `{"type": "string", "size": {"min": 5, "max": 10}}`            | Uniformly generates a random string with a size bounded from `5` (inclusive) to `10` (exclusive). |
-| `{"type": "string", "max": 5, "size": {"max": 10}}`            | :arrow_up: Equivalent, because the `min` argument is taken from the parent.                       |
-| `{"type": "string", "max": 100, "size": {"min": 5, max": 10}}` | :arrow_up: Equivalent, because the `min` argument is ignored from the parent when it's supplied.  |
-| `{"type": "string", "max": 5, "max": 10, size": {}}`           | :arrow_up: Equivalent, because both arguments are taken from the parent.                          |
-| `{"type": "string", "max": 5, "max": 10}`                      | Uniformly generates 10 character alphanumeric strings (the default `size` is used).               |
+| Schema                                                           | Summary                                                                                           |
+|------------------------------------------------------------------|---------------------------------------------------------------------------------------------------|
+| `"string"`                                                       | Uniformly generates 10 character alphanumeric strings.                                            |
+| `{"type": "string"}`                                             | :arrow_up: Avro equivalent.                                                                       |
+| `{"type": "string", "faker": "random"}`                          | :arrow_up: Equivalent.                                                                            |
+| `{"type": "string", "faker": {}}`                                | :arrow_up: Equivalent, but useless                                                                |
+| `{"type": "string", "faker": {"faker": "random"}}`               | :arrow_up: Equivalent, but useless.                                                               |
+| `{"type": "string", "length": {"min": 5, "max": 10}}`            | Uniformly generates a random string with a size bounded from `5` (inclusive) to `10` (exclusive). |
+| `{"type": "string", "min": 5, "length: {"max": 10}}`             | :arrow_up: Equivalent, because the `min` argument is taken from the parent.                       |
+| `{"type": "string", "min": 100, "length": {"min": 5, max": 10}}` | :arrow_up: Equivalent, because the `min` argument is ignored from the parent when it's supplied.  |
+| `{"type": "string", "max": 5, "max": 10, "length": {}}`          | :arrow_up: Equivalent, because both arguments are taken from the parent.                          |
+| `{"type": "string", "max": 5, "max": 10}`                        | Uniformly generates 10 character alphanumeric strings (the default `size` is used).               |
 
 ### The **value** and **oneof** strategy with `STRING`
 
@@ -272,15 +274,15 @@ The AvroFaker library wraps [DataFaker](https://github.com/datafaker-net/datafak
 
 This strategy has the following argument (which auto-selects the strategy if no other has been explicitly selected):
 
-- **`expression`** to specify the [DataFaker expression](https://www.datafaker.net/documentation/expressions/) to use in generation.
+- **`expression`** to specify the [DataFaker expression](https://www.datafaker.net/documentation/expressions/) to use in generation (Default: `#{examplify 'A999'}`)
 
-| Schema                                                                          | Summary                                                     |
-|---------------------------------------------------------------------------------|-------------------------------------------------------------|
-| `{"type": "string", "faker": "expression", "expression": "#{numerify '####'}"}` | Generates four digit numbers using DataFaker                |
-| `{"type": "string", "expression": "#{numerify '####'}"}`                        | :arrow_up: Equivalent, but implicitly selects the strategy. |
-| `{"type": "string", "expression": ""#{letterify 'key-?????'}"}`                 | Generates 5 letter random words: `"key-lvxts"`              |
-| `{"type": "string", "expression": ""#{Name.first_name} #{Name.last_name}"}`     | Generates names: `"Kit Graham"`                             |
-| `#{Address.street_address}\n#{Address.city}, #{Address.country}`                | Generates a three line address.                             |
+| Schema                                                                                               | Summary                                                     |
+|------------------------------------------------------------------------------------------------------|-------------------------------------------------------------|
+| `{"type": "string", "faker": "expression", "expression": "#{numerify '####'}"}`                      | Generates four digit numbers using DataFaker                |
+| `{"type": "string", "expression": "#{numerify '####'}"}`                                             | :arrow_up: Equivalent, but implicitly selects the strategy. |
+| `{"type": "string", "expression": "#{letterify 'key-?????'}"}`                                       | Generates 5 letter random words: `"key-lvxts"`              |
+| `{"type": "string", "expression": "#{Name.first_name} #{Name.last_name}"}`                           | Generates names: `"Kit Graham"`                             |
+| `{"type": "string", "expression": "#{Address.street_address}\n#{Address.city}, #{Address.country}`"} | Generates a three line address.                             |
 
 Generating `ARRAY` data
 ------------------------------------------------------------------------------

@@ -81,6 +81,19 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
 
     def generate(props: (String, Any)*): LazyList[T] = generate(Schema.create(sType), props: _*)
 
+    case class ItTestExpected(description: String, schema: String, fn: Any => Any = identity) {
+
+      /** Produces the test to be executed (an `it` word). */
+      def execute(expected: Seq[_]): Unit = {
+        // Generate the values and ensure they are the correct type at the generator
+        val values = generate(schema).take(expected.size)
+
+        it(s"$description: $schema") {
+          values shouldBe expected.map(fn)
+        }
+      }
+    }
+
     class Dist(val xs: (_, Long)*) {
 
       /** Produces the test to be executed (an `it` word). */
@@ -101,7 +114,8 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
       def apply(schema: String, dist: Dist): Unit =
         dist.execute(description, adaptSchemaWithType(schema), fn = identity)
 
-      def apply(schema: String, expected: Seq[_]): Unit = {}
+      def apply(schema: String, expected: Seq[_]): Unit =
+        ItTestExpected(description, adaptSchemaWithType(schema)).execute(expected)
 
       def apply(cases: (String, Seq[_])*): Unit = {
         for ((schema, expected) <- cases) apply(schema, expected)
@@ -144,19 +158,6 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
       case other     => other.toString.toDouble
     }
 
-    private[this] case class IntegralIt(description: String, schema: String) {
-
-      /** Produces the test to be executed (an `it` word). */
-      def execute(expected: Seq[_]): Unit = {
-        // Generate the values and ensure they are the correct type at the generator
-        val values = generate(schema).take(expected.size)
-
-        it(s"$description: $schema") {
-          values shouldBe expected.map(toLong)
-        }
-      }
-    }
-
     private[this] case class FractionalIt(description: String, schema: String) {
 
       /** Produces the test to be executed (an `it` word). */
@@ -192,7 +193,7 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
 
       override def apply(schema: String, expected: Seq[_]): Unit = {
         if (isIntegral)
-          IntegralIt(description, adaptSchemaWithType(schema)).execute(expected)
+          ItTestExpected(description, adaptSchemaWithType(schema), toLong).execute(expected)
         else
           FractionalIt(description, adaptSchemaWithType(schema)).execute(expected)
       }
@@ -248,12 +249,12 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
         """{"type": "<TYPE>"}""" -> random
       )
 
-      it("should generate a random Int when the random strategy is explicitly set")(
+      it("should generate a random number when the random strategy is explicitly set")(
         """{"faker": "random"}""" -> random,
         """{"faker": {"faker": "random"}}""" -> random
       )
 
-      it("should generate a random Int when the random strategy is unset")(
+      it("should generate a random number when the random strategy is unset")(
         """{"faker": {}}""" -> random
       )
 
@@ -641,36 +642,69 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     }
   }
 
-  describe("Generating Avro STRING data") {
-    it("should create ten character strings by default") {
-      val ctx = FakerContext(new Random(0))
-      val gen = AvroFaker(Schema.create(Schema.Type.STRING))
-      gen(ctx) shouldBe "CCzLNHBFHu"
-      gen(ctx) shouldBe "RvbI1iI19W"
-      gen(ctx) shouldBe "jGGR8UNWut"
-    }
+  describe("Generate STRING with the random strategy") {
+    val it = Tester.String
 
-    it("should have a configurable length") {
-      Tester.String.generate(ArgLength -> 5).take(5) shouldBe Seq("CCzLN", "HBFHu", "RvbI1", "iI19W", "jGGR8")
-    }
+    val random = Seq(
+      "CCzLNHBFHu",
+      "RvbI1iI19W",
+      "jGGR8UNWut",
+      "FRZvWebpA5",
+      "WHfyqts0co",
+      "JXQqPyuxbr",
+      "589wyJzS2S",
+      "uiHrAOB2Ru"
+    )
 
-    /** Generate a list from a faker expression. */
-    def genFakeString(expression: String): LazyList[String] = Tester.String.generate(ArgExpression -> expression)
+    it("should use the random strategy on unannotated schemas")(
+      """"<TYPE>"""" -> random,
+      """{"type": "<TYPE>"}""" -> random,
+      """{"type": "<TYPE>", "length": 10}""" -> random
+    )
 
-    it("should create faker data") {
-      // Name examples
-      genFakeString("#{Name.first_name} #{Name.last_name}").take(3) shouldBe Seq(
+    it("should generate a random string when the random strategy is explicitly set")(
+      """{"faker": "random"}""" -> random,
+      """{"faker": "random", "length": 10}""" -> random,
+      """{"faker": {"faker": "random"}}""" -> random
+    )
+
+    it("should generate a random String when the random strategy is unset")(
+      """{"faker": {}}""" -> random
+    )
+
+    it("should allow configuring the random strategy with a length")(
+      """{"length": 5}""" -> random.flatMap(_.splitAt(5).productIterator), // Same seed gets the same letters
+      """{"length": 1}""" -> random.flatMap(_.toCharArray).map(_.toString),
+      """{"length": {"min": 5, "max": 10}}""" -> random, // TODO
+      """{"min": 5, "length": {"max": 10}}""" -> random, // TODO
+      """{"min": 100, "length": {"min": 5, "max": 10}}""" -> random, // TODO
+      """{"min": 5, "max": 10, "length": {}}""" -> random, // TODO
+      """{"min": 5, "max": 10}""" -> random // TODO
+    )
+  }
+
+  describe("Generate STRING with the faker expression strategy") {
+    val expected = Seq("Y929", "V665", "B539", "C035", "C267", "O691", "M262", "O293", "K084", "M371")
+
+    Tester.String("should generate with the defaults when the strategy is selected")(
+      """{"faker": "expression"}""" -> expected,
+      """{"expression": "#{examplify 'A999'}"}""" -> expected,
+      """{"expression": "#{examplify 'A999'}", "length": 10}""" -> expected,
+      """{"faker": "expression", "expression": "#{examplify 'A999'}", "length": 10}""" -> expected
+    )
+
+    Tester.String("should generate expressions")(
+      """{"expression": "#{Name.first_name} #{Name.last_name}"}""" -> Seq(
         "Kit Graham",
         "Dessie McDermott",
         "Carola Runolfsson"
-      )
-      // Address examples
-      genFakeString("#{Address.street_address}\n#{Address.city}, #{Address.country}").take(3) shouldBe Seq(
+      ),
+      """{"expression": "#{Address.street_address}\n#{Address.city}, #{Address.country}"}""" -> Seq(
         "95986 Langworth Bypass\nCarolahaven, Romania",
         "996 Thi Circle\nEast Jeanfort, New Caledonia",
         "1324 O'Reilly Lane\nBernardville, Sweden"
       )
-    }
+    )
   }
 
   describe("Generating Avro BYTES data") {
