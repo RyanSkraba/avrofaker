@@ -656,6 +656,8 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
       "uiHrAOB2Ru"
     )
 
+    val random5to9 = Seq("CzLNH", "FHuRvb", "1iI19Wj", "GR8UNWut", "RZvWe", "pA5WH", "yqts0", "oJXQqPy")
+
     it("should use the random strategy on unannotated schemas")(
       """"<TYPE>"""" -> random,
       """{"type": "<TYPE>"}""" -> random,
@@ -675,11 +677,11 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     it("should allow configuring the random strategy with a length")(
       """{"length": 5}""" -> random.flatMap(_.splitAt(5).productIterator), // Same seed gets the same letters
       """{"length": 1}""" -> random.flatMap(_.toCharArray).map(_.toString),
-      """{"length": {"min": 5, "max": 10}}""" -> random, // TODO
-      """{"min": 5, "length": {"max": 10}}""" -> random, // TODO
-      """{"min": 100, "length": {"min": 5, "max": 10}}""" -> random, // TODO
-      """{"min": 5, "max": 10, "length": {}}""" -> random, // TODO
-      """{"min": 5, "max": 10}""" -> random // TODO
+      """{"length": {"min": 5, "max": 10}}""" -> random5to9,
+      """{"min": 5, "length": {"max": 10}}""" -> random5to9,
+      """{"min": 100, "length": {"min": 5, "max": 10}}""" -> random5to9,
+      """{"min": 5, "max": 10, "length": {}}""" -> random5to9,
+      """{"min": 5, "max": 10}""" -> random5to9
     )
   }
 

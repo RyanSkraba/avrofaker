@@ -76,7 +76,8 @@ object AvroFaker {
   val StringArgToImplicitStrategy = ListMap(
     StrategyValue -> StrategyValue,
     StrategyExpression -> StrategyExpression,
-    StrategyOneOf -> StrategyOneOf
+    StrategyOneOf -> StrategyOneOf,
+    ArgLength -> StrategyRandom
   )
 
   def apply(schema: Schema): AvroFaker[_] = {
@@ -307,11 +308,16 @@ case class FixedGenerator(schema: Schema) extends AvroFaker[Array[Byte]] {
 
 /** A faker that generates a random string. */
 private[this] case class StringRandomFaker(args: Map[String, Any]) extends AvroFaker[String] {
-  val lengthFn: FakerContext => Long = fake[Long]((0, Int.MaxValue), args, ArgLength, 10)
+  val lengthFn: FakerContext => Long = fake[Long]((-1, Int.MaxValue), args, ArgLength) match {
+    // Here, we replace the undesirable MaxValue random generator with a smaller constant.
+    case rf: RandomFaker[Long] if rf.min == ConstantFaker(-1L) && rf.max == ConstantFaker[Long](Int.MaxValue) =>
+      ConstantFaker(10L)
+    case other => other
+  }
   def apply(ctx: FakerContext): String = ctx.rnd.alphanumeric.take(lengthFn(ctx).toInt).mkString
 }
 
-/** A faker that generates a random string. */
+/** A faker that uses DataFaker to generate a string. */
 private[this] case class StringExpressionFaker(args: Map[String, Any]) extends AvroFaker[String] {
   val expressionFn: AvroFaker[String] = StringFaker.fake(args, StrategyExpression, "#{examplify 'A999'}")
   var faker: Option[Faker] = None
