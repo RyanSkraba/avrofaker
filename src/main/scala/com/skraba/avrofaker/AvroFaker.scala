@@ -77,6 +77,7 @@ object AvroFaker {
     StrategyValue -> StrategyValue,
     StrategyExpression -> StrategyExpression,
     StrategyOneOf -> StrategyOneOf,
+    StrategySumOf -> StrategySumOf,
     ArgLength -> StrategyRandom
   )
 
@@ -202,8 +203,6 @@ case class UnionGenerator(schema: Schema) extends AvroFaker[Any] {
   *
   * @param schema
   *   a schema of type FIXED
-  * @param rnd
-  *   random number generator (for reproducibility if desired)
   */
 case class FixedGenerator(schema: Schema) extends AvroFaker[Array[Byte]] {
   def apply(ctx: FakerContext): Array[Byte] = ctx.rnd.nextBytes(schema.getFixedSize)
@@ -238,6 +237,11 @@ private[this] object StringExpressionFaker {
     StringExpressionFaker(expressionFn = StringFaker.fake(args, StrategyExpression, "#{examplify 'A999'}"))
 }
 
+/** A faker that concatenates strings. */
+private[this] case class StringSumOfFaker(fns: Seq[AvroFaker[_]]) extends AvroFaker[String] {
+  def apply(ctx: FakerContext): String = fns.map(_(ctx).toString).mkString("")
+}
+
 private[this] object StringFaker {
   def fake(args: Map[String, Any], key: String, dflt: Any = Map(ArgFaker -> StrategyRandom)): AvroFaker[String] = {
 
@@ -249,11 +253,12 @@ private[this] object StringFaker {
       case StrategyRandom     => StringRandomFaker(args)
       case StrategyValue      => fake(args, StrategyValue)
       case StrategyExpression => StringExpressionFaker(args)
-      case StrategyOneOf =>
+      case StrategyOneOf | StrategySumOf =>
         fake(args, args(key).toString, dflt) match {
           case RandomOneOfFaker(fns) =>
             args(key) match {
               case StrategyOneOf => OneOfFaker(args, fns)
+              case StrategySumOf => StringSumOfFaker(fns)
             }
           case other => other
         }

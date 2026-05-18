@@ -247,11 +247,12 @@ This strategy has the following argument:
 | `{"type": "string", "max": 5, "max": 10, "length": {}}`          | :arrow_up: Equivalent, because both arguments are taken from the parent.                          |
 | `{"type": "string", "max": 5, "max": 10}`                        | Uniformly generates 10 character alphanumeric strings (the default `size` is used).               |
 
-### The **value** and **oneof** strategy with `STRING`
+### The **value**, **oneof** and **sumof** strategy with `STRING`
 
 These two strategies both apply to `STRING` data as in `INT` data 
 - with **value** you can specify a values or a set of values to choose from randomly, and 
-- **oneof** allows you to select from the set using an `INT` generator in the `index` argument.
+- **oneof** allows you to select from the set using an `INT` generator in the `index` argument, and
+- **sumof** concatenates the strings that it generates (the equivalent of `+` for numbers).
 
 | Schema                                                                                                   | Summary                                                                                                 |
 |----------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------|
@@ -263,10 +264,12 @@ These two strategies both apply to `STRING` data as in `INT` data
 | `{"type": "string", "oneof": ["Hello", "Bonjour"}`                                                       | :arrow_up: Equivalent                                                                                   |
 | `{"type": "string", "faker": "oneof", "oneof": ["Hello", "Bonjour"}`                                     | Equivalent, but explicitly selects the strategy.                                                        |
 | `{"type": "string", "faker": ["X", {"min": 0, "max": 9}]}`                                               | Picks `"X"` 50% of the time, and a single digit character string the other 50%.                         |
-| `{"type": "string", "oneof": ["A", "B", "C"], "index": 0}`                                               | Always generates "A".                                                                                   |
+| `{"type": "string", "oneof": ["A", "B", "C"], "index": 0}`                                               | Always generates `"A"`.                                                                                 |
 | `{"type": "string", "oneof": ["A", "B", "C"], "index": -1}`                                              | :arrow_up: Equivalent, the implicit `min` on the index forces it to `0`.                                |
 | `{"type": "string", "oneof": ["A", "B", "C"], "index": {"step": 1}}`                                     | The index is a sequence `0`,`1`,`2`,`0`,`1`, etc, so alternates `"A"`, `"B"`, `"C"`, `"A"`, `"B"`, etc. |
 | `{"type": "string", "oneof": ["A", "B", "C", "D", "E"], "index": {"gauss": {"mean": 2.5, "stddev": 1}}}` | Picks the strings `"A"`, `"B"`, `"C"`, `"D"`, `"E"` in a rough bell curve.                              |
+| `{"type": "string", "sumof": ["A", "B", "C"]`                                                            | Always generates `"ABC"`.                                                                               |
+| `{"type": "string", "sumof": [{"faker": "expression"}, ":::", {"faker": "expression"}]}`                 | Generates strings like `"Y929:::P626"`, `"V665:::H777"`, `"B539:::E540"`                                |
 
 ### The **expression** strategy with `STRING`
 
@@ -278,6 +281,8 @@ This strategy has the following argument (which auto-selects the strategy if no 
 
 | Schema                                                                                               | Summary                                                     |
 |------------------------------------------------------------------------------------------------------|-------------------------------------------------------------|
+| `{"type": "string", "faker": "expression"}`                                                          | Generates a capital letter and three digits, like `Y929`    |
+| `{"type": "string", "expression": "#{examplify 'A999'}"}`                                            | :arrow_up: Equivalent, but explicitly sets the expression.  |
 | `{"type": "string", "faker": "expression", "expression": "#{numerify '####'}"}`                      | Generates four digit numbers using DataFaker                |
 | `{"type": "string", "expression": "#{numerify '####'}"}`                                             | :arrow_up: Equivalent, but implicitly selects the strategy. |
 | `{"type": "string", "expression": "#{letterify 'key-?????'}"}`                                       | Generates 5 letter random words: `"key-lvxts"`              |

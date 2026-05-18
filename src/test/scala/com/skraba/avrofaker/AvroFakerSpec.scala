@@ -685,6 +685,55 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     )
   }
 
+  describe(s"Generate STRING with the value, oneof and sumof strategies") {
+    Tester.String("should generate a constant value")(
+      // These are all equivalent
+      """{"value": "ABC"}""" -> Seq.fill(10)("ABC"),
+      """{"faker": 123}""" -> Seq.fill(10)("123"),
+      """{"faker": "value", "value": "ABC"}""" -> Seq.fill(10)("ABC")
+    )
+
+    val randoms = Seq("ABC", "BCD", "BCD", "CDE", "CDE", "CDE", "CDE", "ABC", "ABC", "CDE")
+
+    Tester.String("should pick a random value between 123, 234 and 345")(
+      // These are all equivalent
+      """{"faker": ["ABC", "BCD", "CDE"]}""" -> randoms,
+      """{"value": ["ABC", "BCD", "CDE"]}""" -> randoms,
+      """{"oneof": ["ABC", "BCD", "CDE"]}""" -> randoms,
+      """{"faker": "value", "value": ["ABC", "BCD", "CDE"]}""" -> randoms,
+      """{"faker": "oneof", "oneof": ["ABC", "BCD", "CDE"]}""" -> randoms
+    )
+
+    /** Expected results when picking from a list of values. */
+    val multistrategy =
+      Seq("U721", "J403", "Z360", ":::", "Z430", ":::", "Z082", "F835", ":::", ":::")
+
+    Tester.String("should pick randomly between ::: and the default 4-digit expression")(
+      """{"faker": [":::", {"faker": "expression"}]}""" -> multistrategy
+    )
+
+    Tester.String("should always generate ABC")(
+      """{"oneof": ["ABC", "BCD", "CDE"], "index": 0}""" -> Seq.fill(10)("ABC"),
+      """{"oneof": "ABC"}""" -> Seq.fill(10)("ABC"),
+      """{"oneof": ["ABC", "BCD", "CDE"], "index": -1}""" -> Seq.fill(10)("ABC")
+    )
+
+    Tester.String("should cycle through the elements")(
+      """{"oneof": ["ABC", "BCD", "CDE"], "index": {"step": 1}}""" -> Seq("ABC", "BCD", "CDE", "ABC", "BCD", "CDE")
+    )
+
+    Tester.String("should pick a gaussian distribution of elements")(
+      """{"oneof": ["A", "B", "C", "D", "E", "F", "G"], "index": {"mean": 3.5, "stddev": 1}}""",
+      new Tester.String.Dist("A" -> 61, "B" -> 626, "C" -> 2409, "D" -> 3857, "E" -> 2406, "F" -> 595, "G" -> 46)
+    )
+
+    Tester.String("should concatenate results")(
+      """{"sumof": ["ABC", "BCD", "CDE"]}""" -> Seq.fill(10)("ABCBCDCDE"),
+      """{"sumof": [{"faker": "expression"}, ":::", {"faker": "expression"}]}""" ->
+        Seq("Y929:::P626", "V665:::H777", "B539:::E540", "C035:::X869", "C267:::B240", "O691:::L143", "M262:::S632")
+    )
+  }
+
   describe("Generate STRING with the faker expression strategy") {
     val expected = Seq("Y929", "V665", "B539", "C035", "C267", "O691", "M262", "O293", "K084", "M371")
 
