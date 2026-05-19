@@ -219,10 +219,8 @@ Notes:
 - The default `min` and `max` for a floating point **sequence** are their minimum and maximum values.
 - Where values are truncated for whole numbers, they are retained with as much precision as possible for floating point values.
 
-Generating `String` data
+Generating `STRING` data
 ------------------------------------------------------------------------------
-
-:warning: **DRAFT** :warning: **DRAFT** :warning: **DRAFT** :warning: This spec hasn't been implemented yet, the logic is still being worked out.
 
 ### The **random** strategy with `STRING`
 
@@ -275,7 +273,7 @@ These two strategies both apply to `STRING` data as in `INT` data
 
 The AvroFaker library wraps [DataFaker](https://github.com/datafaker-net/datafaker) and uses it to generate strings with the **expression** strategy.
 
-This strategy has the following argument (which auto-selects the strategy if no other has been explicitly selected):
+This strategy has the following argument (which auto-selects the strategy if no other strategy has been explicitly selected):
 
 - **`expression`** to specify the [DataFaker expression](https://www.datafaker.net/documentation/expressions/) to use in generation (Default: `#{examplify 'A999'}`)
 
@@ -288,6 +286,30 @@ This strategy has the following argument (which auto-selects the strategy if no 
 | `{"type": "string", "expression": "#{letterify 'key-?????'}"}`                                       | Generates 5 letter random words: `"key-lvxts"`              |
 | `{"type": "string", "expression": "#{Name.first_name} #{Name.last_name}"}`                           | Generates names: `"Kit Graham"`                             |
 | `{"type": "string", "expression": "#{Address.street_address}\n#{Address.city}, #{Address.country}`"} | Generates a three line address.                             |
+
+### The **cast** strategy with `STRING`
+
+:warning: **DRAFT** :warning: **DRAFT** :warning: **DRAFT** :warning: This spec hasn't been implemented yet, the logic is still being worked out.
+
+You can turn a strategy for another primitive faker type to a `STRING` using the **cast** strategy.
+
+This strategy has the following arguments (which auto-select the strategy if no other strategy has been explicitly selected):
+
+- **`double`** allows you to create a `DOUBLE` generator and turn it into a series of Strings, or.
+- **`long`** allows you to create a `LONG` generator and turn it into a series of Strings, or
+- **`float`** allows you to create a `FLOAT` generator and turn it into a series of Strings, or
+- **`int`** allows you to create a `INT` generator and turn it into a series of Strings (Default: A sequence of 0, 1, 2, 3).
+- **`pattern`** allows you to set a printf style pattern for formatting a number into a string.
+
+Only one of the arguments `double`, `long`, `float`, `int` will be taken into account (in that order of priority).
+
+| Schema                                                                   | Summary                                                                        |
+|--------------------------------------------------------------------------|--------------------------------------------------------------------------------|
+| `{"type": "string", "faker": "cast"}`                                    | Generates a sequence of `"0"`, `"1"`, `"2"`, `"3"`                             |
+| `{"type": "string", "int": {"step": 1}}`                                 | :arrow_up: Equivalent, but explicitly sets the expression.                     |
+| `{"type": "string", "double": {"stddev": 1}, "pattern": "%.2f"}`         | Generates numbers in a gaussian distribution, formatted to two decimal places. |
+| `{"type": "string", "long": {}, "pattern": "%X"}`                        | Generates 64 bit hexadecimal numbers in upper case.                            |
+| `{"type": "string", "int": {"min": 0, "max": 10000}, "pattern": "%04d"}` | Generates random zero-padded 4 digit numbers.                                  |
 
 Generating `ARRAY` data
 ------------------------------------------------------------------------------
