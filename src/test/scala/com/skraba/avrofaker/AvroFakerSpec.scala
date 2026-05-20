@@ -18,10 +18,12 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     *
     * @param sType
     *   The Avro numeric Schema.Type
+    * @param valueCompareFn
+    *   A function to apply to every generated value and expected value before doing a comparison.
     * @tparam T
     *   The type of datum that AvroFaker should be generating
     */
-  class Tester[T](val sType: Schema.Type)(implicit ct: ClassTag[T]) {
+  class Tester[T](val sType: Schema.Type, val valueCompareFn: Any => Any)(implicit ct: ClassTag[T]) {
 
     /** Given the schema under test, injects the Avro type from this helper.
       *
@@ -37,7 +39,7 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
       */
     def adaptSchemaWithType(schema: String): String = schema match {
       case _ if schema.contains("<TYPE>") => schema.replace("<TYPE>", sType.toString.toLowerCase())
-      case _ if schema.startsWith("{") && !schema.contains("\"type\":") =>
+      case _ if schema.startsWith("{") =>
         s"""{"type": "${sType.toString.toLowerCase}", ${schema.substring(1)}"""
       case _ => schema
     }
@@ -81,7 +83,7 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
 
     def generate(props: (String, Any)*): LazyList[T] = generate(Schema.create(sType), props: _*)
 
-    case class ItTestExpected(description: String, schema: String, fn: Any => Any = identity) {
+    case class ItTestExpected(description: String, schema: String, fn: Any => Any) {
 
       /** Produces the test to be executed (an `it` word). */
       def execute(expected: Seq[_]): Unit = {
@@ -89,7 +91,7 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
         val values = generate(schema).take(expected.size)
 
         it(s"$description: $schema") {
-          values shouldBe expected.map(fn)
+          values.map(fn) shouldBe expected.map(fn)
         }
       }
     }
@@ -110,12 +112,12 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
       }
     }
 
-    class Applies(description: String) {
+    class Applies(description: String, fn: Any => Any = valueCompareFn) {
       def apply(schema: String, dist: Dist): Unit =
-        dist.execute(description, adaptSchemaWithType(schema), fn = identity)
+        dist.execute(description, adaptSchemaWithType(schema), fn = fn)
 
       def apply(schema: String, expected: Seq[_]): Unit =
-        ItTestExpected(description, adaptSchemaWithType(schema)).execute(expected)
+        ItTestExpected(description, adaptSchemaWithType(schema), fn = fn).execute(expected)
 
       def apply(cases: (String, Seq[_])*): Unit = {
         for ((schema, expected) <- cases) apply(schema, expected)
@@ -135,27 +137,18 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     *   The type of datum that AvroFaker should be generating
     */
   class NumericTester[T](override val sType: Schema.Type)(implicit ct: ClassTag[T], num: Numeric[T])
-      extends Tester[T](sType)(ct) {
+      extends Tester[T](
+        sType,
+        num match {
+          case _: Integral[T] => Tester.toLong
+          case _              => Tester.toDouble
+        }
+      )(ct) {
 
     /** True if we are matching a whole number type, false for floating point. */
     val isIntegral: Boolean = num match {
       case _: Integral[T] => true
       case _              => false
-    }
-
-    def toLong(in: Any): Long = in match {
-      case d: Double => d.toLong
-      case i: Int    => i
-      case l: Long   => l
-      case other     => Try(other.toString.toLong).orElse(Try(other.toString.toDouble.toLong)).get
-    }
-
-    def toDouble(in: Any): Double = in match {
-      case i: Int    => i.toDouble
-      case l: Long   => l.toDouble
-      case f: Float  => f.toDouble
-      case d: Double => d
-      case other     => other.toString.toDouble
     }
 
     private[this] case class FractionalIt(description: String, schema: String) {
@@ -183,17 +176,10 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
       private[this] def compare(d1: Double, d2: Double): Assertion = d1 shouldBe (d2 +- 1e-14d)
     }
 
-    class NumericApplies(description: String) extends Applies(description) {
-      override def apply(schema: String, dist: Dist): Unit = {
-        if (isIntegral)
-          dist.execute(description, adaptSchemaWithType(schema), toLong)
-        else
-          dist.execute(description, adaptSchemaWithType(schema), toDouble)
-      }
-
+    class NumericApplies(description: String) extends Applies(description, fn = valueCompareFn) {
       override def apply(schema: String, expected: Seq[_]): Unit = {
         if (isIntegral)
-          ItTestExpected(description, adaptSchemaWithType(schema), toLong).execute(expected)
+          super.apply(adaptSchemaWithType(schema), expected)
         else
           FractionalIt(description, adaptSchemaWithType(schema)).execute(expected)
       }
@@ -209,7 +195,29 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
     val Long = new NumericTester[Long](Schema.Type.LONG)
     val Float = new NumericTester[Float](Schema.Type.FLOAT)
     val Double = new NumericTester[Double](Schema.Type.DOUBLE)
-    val String = new Tester[String](Schema.Type.STRING)
+    val String = new Tester[String](Schema.Type.STRING, identity)
+    val Array = new Tester[Array[_]](
+      Schema.Type.ARRAY,
+      {
+        case xs: Array[_] => xs.toSeq
+        case other        => other
+      }
+    )
+
+    def toLong(in: Any): Long = in match {
+      case d: Double => d.toLong
+      case i: Int    => i
+      case l: Long   => l
+      case other     => Try(other.toString.toLong).orElse(Try(other.toString.toDouble.toLong)).get
+    }
+
+    def toDouble(in: Any): Double = in match {
+      case i: Int    => i.toDouble
+      case l: Long   => l.toDouble
+      case f: Float  => f.toDouble
+      case d: Double => d
+      case other     => other.toString.toDouble
+    }
   }
 
   def randomStrategy[T](it: NumericTester[T]): Unit = {
@@ -595,14 +603,66 @@ class AvroFakerSpec extends AnyFunSpecLike with Matchers {
   }
 
   describe("Generating Avro ARRAY data") {
-    it("should create arrays of its element type") {
-      val schema = SchemaBuilder.array().items().stringBuilder().endString()
-      val ctx = FakerContext(new Random(0))
-      val gen = AvroFaker(schema)
-      gen(ctx) shouldBe Array("CzLNHBFHuR", "vbI1iI19Wj")
-      gen(ctx) shouldBe Array("GR8UNWutFR", "ZvWebpA5WH")
-      gen(ctx) shouldBe Array("yqts0coJXQ", "qPyuxbr589", "wyJzS2SuiH", "rAOB2RuvBb")
-    }
+
+    /*
+    | Schema                                                                      | Summary                                                                                                                 |
+    |-----------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------|
+    | `{"type": "array", "items": "int"}`                                         | Generates random integer arrays: `[0,1,2]`, `[0,1,2]`, `[0,1,2]`...                                                     |
+    | `{"type": "array", "items": "int", "length": {"min": 3, "max": 6}}`         | :arrow_up: Equivalent, but explicitly sets the length of each array.                                                    |
+    | `{"type": "array", "items": "int", "length": 2}`                            | Generates random integer pairs: `[0,1]`, `[0,1]`, `[0,1]`...                                                            |
+    | `{"type": "array", "items": {"type", "int", "step": 1}, "length": 2}`       | Generates a sequence of integer pairs: `[0,1]`, `[2,3]`, `[4,5]`...                                                     |
+    | `{"type": "array", "items": "string", "length" : 2}`                        | Generates pairs of two letter Strings: `["AA", "AB"]`, `["AA", "AB"]`...  Note that the `length` argument is inherited! |
+    | `{"type": "array", "items": {"type", "string", "length": 1}, "length" : 3}` | Generates triples of one letter Strings: `["A", "B", "B"]`, `["A", "A", "B"]`...                                        |
+    | `{"type": "array", "min": 0, "max": 10, items": "double"}`                  | Generates arrays of doubles, 0-9 numbers in an array, each number between [0,10).                                       |
+     */
+
+    val defaultInts = Seq(
+      Seq(-845367200, -965429156, 604591031),
+      Seq(1316484263, -1333195387, 377907320, 1350546348, 1514351261),
+      Seq(19810223, -1923091611, 613975862),
+      Seq(1023700812, -1101159093, -1114661780),
+      Seq(-2119981586, -1016405231, -1106653855, 178375143),
+      Seq(-596233542, -2009457131, 2067936182, 1432048073),
+      Seq(-395271067, 771712312, -1622511698, -1905717566, 1742422067),
+      Seq(177782380, 1486687917, 962469399)
+    )
+
+    Tester.Array("should create arrays of its element type with a default size")(
+      """{"items": "int"}""" -> defaultInts,
+      """{"items": "int", "length": {"min": 3, "max": 6}}""" -> defaultInts
+    )
+
+    Tester.Array("should create arrays of its element type with a constant size")(
+      """{"items": "int", "length": 2}""" -> Seq(
+        Seq(-1630935619, -1483802595),
+        Seq(-864264928, -530909147),
+        Seq(1041189272, -2097915773),
+        Seq(-483282681, 1863963771)
+      )
+    )
+
+    Tester.Array("should create arrays of its element type with a constant size")(
+      """{"items": {"type": "int", "step": 1}, "length": 2}""" -> Seq(Seq(0, 1), Seq(2, 3), Seq(4, 5), Seq(6, 7))
+    )
+
+    Tester.Array("should create STRING pairs of a constant size")(
+      """{"items": "string", "length" : 2}""" -> Seq(Seq("CC", "zL"), Seq("NH", "BF"), Seq("Hu", "Rv"), Seq("bI", "1i"))
+    )
+
+    Tester.Array("should create STRING triples containing a single character")(
+      """{"items": {"type": "string", "length": 1}, "length" : 3}""" -> Seq(Seq("C", "C", "z"), Seq("L", "N", "H"))
+    )
+
+    Tester.Array("should create bounded double arrays from 0 to 10 elements")(
+      """{ "min": 0, "max": 10, "items": "double"}""" -> Seq(
+        Seq(),
+        Seq(2.4053641567148585, 6.374174253501082, 5.504370051176339, 5.975452777972018, 3.3321839947664977,
+          3.851891847407185, 9.84841540199809, 8.791825178724801),
+        Seq(1.7597680203548016),
+        Seq(1.2889715087377673, 1.4660165764651822, 0.23238122483889456, 5.467397571984655, 9.644868606768501,
+          1.0449068625097169, 6.251463634655593, 4.107961954910618)
+      )
+    )
   }
 
   describe("Generating Avro MAP data") {

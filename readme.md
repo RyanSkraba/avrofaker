@@ -316,7 +316,27 @@ Generating `ARRAY` data
 
 :warning: **DRAFT** :warning: **DRAFT** :warning: **DRAFT** :warning: This spec hasn't been implemented yet, the logic is still being worked out.
 
-Generates an array of 3-5 elements (according to it's annotated element type)
+An `ARRAY` is a composite type containing a number of items.
+
+By default, it generates an list of three to five items, where each item is generated from the annotated items in the schema. 
+
+This strategy has the following arguments (which auto-select the strategy if no other strategy has been explicitly selected):
+
+- **length** allows you to create an `INT` that specifies the length of the `ARRAY` to create.
+
+
+| Schema                                                                      | Summary                                                                                                                                                    |
+|-----------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `{"type": "array", "items": "int"}`                                         | Generates random integer arrays: `[-845367200, -965429156, 604591031]`, `[-1316484263, -1333195387, 377907320, 1350546348, 1514351261]`...                 |
+| `{"type": "array", "items": "int", "length": {"min": 3, "max": 6}}`         | :arrow_up: Equivalent, but explicitly sets the length of each array.                                                                                       |
+| `{"type": "array", "items": "int", "length": 2}`                            | Generates random integer pairs: `[-1630935619, -1483802595]`, `[-864264928, -530909147]`...                                                                |
+| `{"type": "array", "items": {"type": "int", "step": 1}, "length": 2}`       | Generates a sequence of integer pairs: `[0,1]`, `[2,3]`, `[4,5]`...                                                                                        |
+| `{"type": "array", "items": "string", "length" : 2}`                        | Generates pairs of two letter Strings: `["CC", "zL"]`), `["NH", "BF"]`, `["Hu", "Rv"]`, `["bI", "1i"]`...  Note that the `length` argument is inherited! |
+| `{"type": "array", "items": {"type": "string", "length": 1}, "length" : 3}` | Generates triples of one letter Strings: `["A", "B", "B"]`, `["A", "A", "B"]`...                                                                           |
+| `{"type": "array", "min": 0, "max": 10, "items": "double"}`                  | Generates arrays of doubles, 0-9 numbers in an array, each number between [0,10).                                                                          |
+
+- TODO: **value** strategy creating a default value
+- TODO: resetting the sequence?
 
 Generating `MAP` data
 ------------------------------------------------------------------------------

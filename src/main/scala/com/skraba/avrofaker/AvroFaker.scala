@@ -57,6 +57,9 @@ object AvroFaker {
   val ArgIndex: String = "index"
   val ArgLength: String = "length"
 
+  // The original schema is carried along in the map.
+  val ArgInternalSchema: String = "__internal_schema"
+
   // This is the list of arguments that, if present, imply that the given strategy should be used
   val NumberArgToImplicitStrategy = ListMap(
     ArgMean -> StrategyGauss,
@@ -81,24 +84,26 @@ object AvroFaker {
     ArgLength -> StrategyRandom
   )
 
-  def apply(schema: Schema): AvroFaker[_] = {
+  def apply(schema: Schema, args: Map[String, Any]): AvroFaker[_] = {
     schema.getType match {
       case Schema.Type.RECORD  => RecordGenerator(schema)
       case Schema.Type.ENUM    => EnumGenerator(schema)
-      case Schema.Type.ARRAY   => ArrayGenerator(schema)
+      case Schema.Type.ARRAY   => ArrayFaker(args ++ getArgs(schema))
       case Schema.Type.MAP     => MapGenerator(schema)
       case Schema.Type.UNION   => UnionGenerator(schema)
       case Schema.Type.FIXED   => FixedGenerator(schema)
-      case Schema.Type.STRING  => StringFaker.fake(getArgs(schema), ArgFaker)
+      case Schema.Type.STRING  => StringFaker.fake(args ++ getArgs(schema), ArgFaker)
       case Schema.Type.BYTES   => BytesGenerator(schema)
-      case Schema.Type.INT     => IntFaker(getArgs(schema))
-      case Schema.Type.LONG    => LongFaker(getArgs(schema))
-      case Schema.Type.FLOAT   => FloatFaker(getArgs(schema))
-      case Schema.Type.DOUBLE  => DoubleFaker(getArgs(schema))
+      case Schema.Type.INT     => IntFaker(args ++ getArgs(schema))
+      case Schema.Type.LONG    => LongFaker(args ++ getArgs(schema))
+      case Schema.Type.FLOAT   => FloatFaker(args ++ getArgs(schema))
+      case Schema.Type.DOUBLE  => DoubleFaker(args ++ getArgs(schema))
       case Schema.Type.BOOLEAN => BooleanGenerator(schema)
       case Schema.Type.NULL    => NullGenerator(schema)
     }
   }
+
+  def apply(schema: Schema): AvroFaker[_] = apply(schema, Map.empty)
 
   def getArgs(in: Schema): Map[String, Any] = {
     def adapt(in: Any): Any = {
@@ -109,7 +114,7 @@ object AvroFaker {
         case other                          => other
       }
     }
-    adapt(in).asInstanceOf[Map[String, Any]]
+    adapt(in).asInstanceOf[Map[String, Any]] ++ Map(ArgInternalSchema -> in)
   }
 }
 
@@ -167,14 +172,22 @@ case class EnumGenerator(schema: Schema) extends AvroFaker[String] with NumberFa
   def apply(ctx: FakerContext): String = symbols(indexFn(ctx).toInt)
 }
 
-/** An ARRAY schema generates 2 to 5 elements of its element type
-  *
-  * @param schema
-  *   a schema of type ARRAY
-  */
-case class ArrayGenerator(schema: Schema) extends AvroFaker[Array[Any]] {
-  private val fn: AvroFaker[?] = AvroFaker(schema.getElementType)
-  def apply(ctx: FakerContext): Array[Any] = Array.fill(2 + ctx.rnd.nextInt(3))(fn.apply(ctx))
+/** A faker that generates an array delegating to its item type. */
+private[this] case class ArrayFaker(lengthFn: AvroFaker[Long], fn: AvroFaker[_]) extends AvroFaker[Array[Any]] {
+  def apply(ctx: FakerContext): Array[Any] = Array.fill(lengthFn(ctx).toInt)(fn.apply(ctx))
+}
+
+private[this] object ArrayFaker extends NumberFaker {
+  def apply(args: Map[String, Any]): ArrayFaker = {
+    ArrayFaker(
+      lengthFn = fake[Long]((-1, Int.MaxValue), args, ArgLength) match {
+        // Here, we replace the undesirable MaxValue random generator with a smaller constant.
+        case RandomFaker(ConstantFaker(-1L), ConstantFaker(Int.MaxValue)) => RandomFaker(3L, 6L)
+        case other                                                        => other
+      },
+      fn = AvroFaker(args(ArgInternalSchema).asInstanceOf[Schema].getElementType, args)
+    )
+  }
 }
 
 /** A MAP schema generates 2 to 5 elements of its value type and a 10 character key
@@ -516,6 +529,9 @@ private[this] object RandomFaker extends NumberFaker {
       case _                => bounds
     }
     RandomFaker(minFn = fake(defaultBounds, args, ArgMin), maxFn = fake(defaultBounds, args, ArgMax))
+  }
+  def apply[T](min: T, max: T)(implicit num: Numeric[T]): RandomFaker[T] = {
+    RandomFaker(minFn = ConstantFaker[T](min), maxFn = ConstantFaker[T](max))
   }
 }
 
