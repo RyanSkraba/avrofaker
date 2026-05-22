@@ -68,6 +68,10 @@ class AvroFakerSpec extends WithTester {
         it("should override arguments from the schema annotations")(
           """{"min": 100, "faker": {"min": 0}}""" -> withMinimum
         )
+
+        it("should generate between -1 and 2")(
+          """{"min": -1, "max": 2}""" -> Seq(-1, 0, 0, 1, 1, 1, 1, -1, -1, 1)
+        )
       } else {
         it("should allow configuring the random strategy with a minimum")(
           """{"min": 0.5, "faker": "random"}""" -> withMinimum,
@@ -80,6 +84,12 @@ class AvroFakerSpec extends WithTester {
 
         it("should override arguments from the schema annotations")(
           """{"min": -0.5, "faker": {"min": 0.5}}""" -> withMinimum
+        )
+
+        it("should generate between -1 and 2")(
+          """{"min": -1, "max": 2}""" -> Seq(1.1929033621299712, -0.2783907529855424, 0.9122522760503249,
+            0.6513110153529018, 0.7926358333916053, -3.44801570050679e-4, 0.1555675542221555, 1.954524620599427,
+            1.6375475536174404, 1.823747538446343)
         )
       }
 
@@ -192,6 +202,15 @@ class AvroFakerSpec extends WithTester {
       it("should start from a specific value and loop")(
         """{"min": 0,  "faker": {"start": 10, "max": 13}}""" -> Seq(10, 11, 12, 0, 1),
         """{"min": 0, "max": 13, "faker": {"start": 10}}""" -> Seq(10, 11, 12, 0, 1)
+      )
+      it("should start at the specified value")(
+        """{"min": 10,  "step": 1}""" -> Seq(10, 11, 12, 13, 14, 15, 16, 17, 18, 19)
+      )
+      it("should rotate before reaching the end")(
+        """{"min": 1, "max": 4, "step": 1}""" -> Seq(1, 2, 3, 1, 2, 3, 1, 2, 3, 1)
+      )
+      it("should have a configurable step before reaching the end")(
+        """{"min": -5, "max": 5, "step": 3}""" -> Seq(-5, -2, 1, 4, -3, 0, 3, -4, -1, 2, -5, -2, 1, 4, -3)
       )
 
       if (it.sType == Schema.Type.INT)
@@ -603,28 +622,6 @@ class AvroFakerSpec extends WithTester {
       gen(ctx) shouldBe Array(3, 37, -12, 29, 62, -70)
     }
   }
-
-  // LONG and INT schema types are identical except for the return type
-  for (tester <- Seq(Tester.Int, Tester.Long))
-    describe(s"Generating Avro ${tester.sType} data (common)") {
-      import tester._
-      it("should be random by default") {
-        generate(ArgMin -> -1, ArgMax -> 2).take(10) shouldBe Seq(-1, 0, 0, 1, 1, 1, 1, -1, -1, 1)
-      }
-
-      it("should start at the specified value") {
-        generate(ArgMin -> "10", ArgStep -> "1").take(10) shouldBe Seq(10, 11, 12, 13, 14, 15, 16, 17, 18, 19)
-      }
-
-      it("should rotate before reaching the end") {
-        generate(ArgMin -> 1, ArgMax -> 4, ArgStep -> 1).take(10) shouldBe Seq(1, 2, 3, 1, 2, 3, 1, 2, 3, 1)
-      }
-
-      it("should have a configurable step before reaching the end") {
-        generate(ArgMin -> -5, ArgMax -> 5, ArgStep -> 3).take(15) shouldBe Seq(-5, -2, 1, 4, -3, 0, 3, -4, -1, 2, -5,
-          -2, 1, 4, -3)
-      }
-    }
 
   // DOUBLE and FLOAT schema types are identical except for the precision.  The type is checked in the generate method, so we force it to a Double for the value check
   for ((tester, precision) <- Seq((Tester.Float, 1e-6), (Tester.Double, 1e-14)))
