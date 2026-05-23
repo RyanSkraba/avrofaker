@@ -13,7 +13,7 @@ class AvroFakerSpec extends WithTester {
     describe(s"Generate ${it.sType} with the random strategy") {
 
       /** Expected results over the default random range */
-      val random = it.sType match {
+      val defaults = it.sType match {
         case Schema.Type.INT =>
           Seq(-1630935619, -1483802595, -864264928)
         case Schema.Type.LONG =>
@@ -42,17 +42,17 @@ class AvroFakerSpec extends WithTester {
       }
 
       it("should use the random strategy on unannotated schemas")(
-        """"<TYPE>"""" -> random,
-        """{"type": "<TYPE>"}""" -> random
+        """"<TYPE>"""" -> defaults,
+        """{"type": "<TYPE>"}""" -> defaults
       )
 
       it("should generate a random number when the random strategy is explicitly set")(
-        """{"faker": "random"}""" -> random,
-        """{"faker": {"faker": "random"}}""" -> random
+        """{"faker": "random"}""" -> defaults,
+        """{"faker": {"faker": "random"}}""" -> defaults
       )
 
       it("should generate a random number when the random strategy is unset")(
-        """{"faker": {}}""" -> random
+        """{"faker": {}}""" -> defaults
       )
 
       if (it.isIntegral) {
@@ -212,6 +212,16 @@ class AvroFakerSpec extends WithTester {
       it("should have a configurable step before reaching the end")(
         """{"min": -5, "max": 5, "step": 3}""" -> Seq(-5, -2, 1, 4, -3, 0, 3, -4, -1, 2, -5, -2, 1, 4, -3)
       )
+
+      if (!it.isIntegral) {
+        it("should start at the specified value at fractional values") {
+          """{"max": 0.75, "step": -0.25}""" -> Seq(0.5, 0.25, 0.0, -0.25, -0.5, -0.75, -1.0, -1.25, -1.5, -1.75)
+        }
+
+        it("should rotate before reaching the end with fractional values") {
+          """{"min": 0.75, "max": 2.5, "step": 0.5}""" -> Seq(0.75, 1.25, 1.75, 2.25, 1.0, 1.5, 2.0, 0.75, 1.25, 1.75)
+        }
+      }
 
       if (it.sType == Schema.Type.INT)
         it("should roll over at the default max value")(
@@ -622,61 +632,6 @@ class AvroFakerSpec extends WithTester {
       gen(ctx) shouldBe Array(3, 37, -12, 29, 62, -70)
     }
   }
-
-  // DOUBLE and FLOAT schema types are identical except for the precision.  The type is checked in the generate method, so we force it to a Double for the value check
-  for ((tester, precision) <- Seq((Tester.Float, 1e-6), (Tester.Double, 1e-14)))
-    describe(s"Generating Avro ${tester.sType} data (common)") {
-      import tester._
-      it("should generate random numbers") {
-        val gen = generate().map(_.toString.toDouble)
-        gen.head shouldBe 0.730967787376657 +- precision
-        gen(1) shouldBe 0.24053641567148587 +- precision
-        gen(2) shouldBe 0.6374174253501083 +- precision
-      }
-
-      it("should generate random numbers with a minimum and maximum") {
-        val gen = generate(AvroFaker.ArgMin -> 10, AvroFaker.ArgMax -> 20).map(_.toString.toDouble)
-        gen.head shouldBe 17.30967787376657 +- precision
-        gen(1) shouldBe 12.405364156714858 +- precision
-        gen(2) shouldBe 16.37417425350108 +- precision
-      }
-
-      it("should generate guassian distribution") {
-        val gen = generate(AvroFaker.ArgMean -> 0.0).map(_.toString.toDouble)
-        gen.head shouldBe 0.8025330637390305 +- precision
-        gen(1) shouldBe -0.9015460884175122 +- precision
-        gen(2) shouldBe 2.080920790428163 +- precision
-      }
-
-      it("should start at the minimum") {
-        generate(ArgMin -> 10, ArgStep -> 1).map(_.toString.toDouble).take(10) shouldBe Seq(10d, 11d, 12d, 13d, 14d,
-          15d, 16d, 17d, 18d, 19d)
-      }
-
-      it("should rotate before reaching the end") {
-        generate(ArgMin -> 1, ArgMax -> 4, ArgStep -> 1).map(_.toString.toDouble).take(10) shouldBe Seq(1d, 2d, 3d, 1d,
-          2d, 3d, 1d, 2d, 3d, 1d)
-      }
-
-      it("should start at the specified value at fractional values") {
-        // Note that these values are all perfectly representable in floating point
-        generate(ArgMax -> 0.75, ArgStep -> -0.25).map(_.toString.toDouble).take(10) shouldBe Seq(0.5, 0.25, 0.0, -0.25,
-          -0.5, -0.75, -1.0, -1.25, -1.5, -1.75)
-      }
-
-      it("should rotate before reaching the end with fractional values") {
-        // Note that these values are all perfectly representable in floating point
-        generate(ArgMin -> 0.75, ArgMax -> 2.5, ArgStep -> 0.5)
-          .map(_.toString.toDouble)
-          .take(10) shouldBe Seq(0.75, 1.25, 1.75, 2.25, 1.0, 1.5, 2.0, 0.75, 1.25, 1.75)
-      }
-
-      it("should have a configurable step before reaching the end") {
-        generate(ArgMin -> -5, ArgMax -> 5, ArgStep -> 3)
-          .map(_.toString.toDouble)
-          .take(15) shouldBe Seq(-5d, -2d, 1d, 4d, -3d, 0d, 3d, -4d, -1d, 2d, -5d, -2d, 1d, 4d, -3d)
-      }
-    }
 
   describe("Generating Avro BOOLEAN data") {
     it("should generate random booleans") {
