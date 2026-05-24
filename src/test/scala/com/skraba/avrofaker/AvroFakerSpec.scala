@@ -471,14 +471,112 @@ class AvroFakerSpec extends WithTester {
   }
 
   describe("Generating Avro MAP data") {
-    it("should create maps of its value type") {
-      val schema = SchemaBuilder.map().values().`type`(IntSequence)
-      val ctx = FakerContext(new Random(0))
-      val gen = AvroFaker(schema)
-      gen(ctx) shouldBe Map("CzLNHBFHuR" -> 0, "vbI1iI19Wj" -> 1)
-      gen(ctx) shouldBe Map("GR8UNWutFR" -> 2, "ZvWebpA5WH" -> 3)
-      gen(ctx) shouldBe Map("yqts0coJXQ" -> 4, "qPyuxbr589" -> 5, "wyJzS2SuiH" -> 6, "rAOB2RuvBb" -> 7)
-    }
+    val defaultInts = Seq(
+      Map("CzLNHBFHuR" -> 1316484263, "1iI19WjGGR" -> 49903503, "WutFRZvWeb" -> 1023700812),
+      Map(
+        "vBbFbQPNB7" -> -1052968156,
+        "SWpBejTwv1" -> 575571244,
+        "Pyuxbr589w" -> -766178373,
+        "Hfyqts0coJ" -> 484847823,
+        "S2SuiHrAOB" -> -1218980251
+      ),
+      Map("7sjiP63hvG" -> 1382431975, "fc8BAUaequ" -> 1831433050, "pB2TWOPFt1" -> -1067015046),
+      Map("zxd8prf0oY" -> -348950749, "jFIXxlrCzE" -> 752288255, "X5hLVIpJ1E" -> -1567159908),
+      Map(
+        "m0zER7Z50Y" -> 430605778,
+        "DuJsQsMkp0" -> -1620592409,
+        "uvgbCx2TEr" -> -871983775,
+        "ut0Uk2wzXd" -> 758174477
+      ),
+      Map("cKN0hZKzaP" -> 86391971, "oP2Wz64nwk" -> 1009233430, "TyeMd0v8N5" -> 458034654),
+      Map(
+        "V6kIx0Ngqk" -> -1333050422,
+        "m3uF6DWDU0" -> -654861888,
+        "4vR6Yu7uds" -> -973694788,
+        "BNrJEUwjBg" -> -697131850
+      ),
+      Map("09HViqK07H" -> -560660383, "aWih0Og1ZY" -> 362481239, "pNwuZuiGR2" -> -2054498974)
+    )
+
+    Tester.Map("should create maps with the default key and size")(
+      """{"values": "int"}""" -> defaultInts,
+      """{"values": "int", "key": {"length": 10}, "length": {"min": 3, "max": 6}}""" -> defaultInts
+    )
+
+    Tester.Map("should create maps with the default key and constant size")(
+      """{"values": "int", "length": 2}""" -> Seq(
+        Map("CC" -> 295101692, "HB" -> 604591031),
+        Map("Rv" -> 1041189272, "iI" -> 377907320),
+        Map("jG" -> 1388566476, "UN" -> 19810223),
+        Map("FR" -> 1342491603, "eb" -> 1023700812)
+      )
+    )
+
+    Tester.Map("should create maps setting the map size and the key size to a constant 2, and a value sequence")(
+      """{"values": {"type": "int", "step": 1}, "length": 2}""" -> Seq(
+        Map("CC" -> 0, "zL" -> 1),
+        Map("NH" -> 2, "BF" -> 3),
+        Map("Hu" -> 4, "Rv" -> 5),
+        Map("bI" -> 6, "1i" -> 7)
+      )
+    )
+
+    Tester.Map("should create maps setting the map size and the key size to a constant 2 with random STRING values")(
+      """{"values": "string", "length" : 2}""" -> Seq(
+        Map("CC" -> "zL", "NH" -> "BF"),
+        Map("Hu" -> "Rv", "bI" -> "1i"),
+        Map("I1" -> "9W", "jG" -> "GR"),
+        Map("8U" -> "NW", "ut" -> "FR")
+      )
+    )
+
+    Tester.Map("should create maps with 3 STRING keys of with size 1 STRING values")(
+      """{"values": {"type": "string", "length": 1}, "length" : 3}""" -> Seq(
+        Map("CCz" -> "L", "NHB" -> "F", "HuR" -> "v"),
+        Map("bI1" -> "i", "I19" -> "W", "jGG" -> "R"),
+        Map("8UN" -> "W", "utF" -> "R", "ZvW" -> "e"),
+        Map("bpA" -> "5", "WHf" -> "y", "qts" -> "0")
+      )
+    )
+
+    Tester.Map("should create maps with 0 to 10 keys containing doubles from 0 to 10")(
+      """{ "min": 0, "max": 10, "values": "double"}""" -> Seq(
+        Map(),
+        Map(
+          "" -> 7.462414053223306,
+          "R8UN" -> 0.013866804054343262,
+          "iI19W" -> 2.7495396603548485,
+          "LNHBFHuRv" -> 3.851891847407185,
+          "bp" -> 7.763122912749325,
+          "0coJ" -> 4.122177440926348,
+          "FRZ" -> 2.52883130686676
+        ),
+        Map(
+          "" -> 3.387696535357536,
+          "yuxbr58" -> 7.223571191888487,
+          "uvBbF" -> 6.125811047098681,
+          "NB7ZuKSWp" -> 7.7131296617067955,
+          "JzS2SuiH" -> 6.895039878550204,
+          "Twv1N" -> 9.453332389596289
+        ),
+        Map("sjiP63h" -> 3.162993026242317)
+      )
+    )
+
+    Tester.Map("should create maps with DataFaker expression keys")(
+      """{"values": {"type": "int", "min": 10, "max": 100}, "key": {"expression": "#{Address.country}"}}""" -> Seq(
+        Map("Luxembourg" -> 57, "France" -> 45, "Moldova" -> 93),
+        Map("Andorra" -> 84, "Trinidad and Tobago" -> 79, "Mongolia" -> 87, "Zambia" -> 31, "Swaziland" -> 27),
+        Map(
+          "Liechtenstein" -> 24,
+          "Saint Pierre and Miquelon" -> 45,
+          "Sierra Leone" -> 25,
+          "Bahrain" -> 14,
+          "Portugal" -> 92
+        ),
+        Map("Gabon" -> 30, "India" -> 28, "Kenya" -> 87, "Gambia" -> 84, "Central African Republic" -> 23)
+      )
+    )
   }
 
   describe("Generating Avro UNION data") {

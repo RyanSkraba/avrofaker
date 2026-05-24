@@ -56,6 +56,7 @@ object AvroFaker {
   val ArgStart: String = "start"
   val ArgIndex: String = "index"
   val ArgLength: String = "length"
+  val ArgKey: String = "key"
 
   // The original schema is carried along in the map.
   val ArgInternalSchema: String = "__internal_schema"
@@ -89,7 +90,7 @@ object AvroFaker {
       case Schema.Type.RECORD  => RecordGenerator(schema)
       case Schema.Type.ENUM    => EnumGenerator(schema)
       case Schema.Type.ARRAY   => ArrayFaker(args ++ getArgs(schema))
-      case Schema.Type.MAP     => MapGenerator(schema)
+      case Schema.Type.MAP     => MapFaker(args ++ getArgs(schema))
       case Schema.Type.UNION   => UnionGenerator(schema)
       case Schema.Type.FIXED   => FixedGenerator(schema)
       case Schema.Type.STRING  => StringFaker.fake(args ++ getArgs(schema), ArgFaker)
@@ -190,16 +191,24 @@ private[this] object ArrayFaker extends NumberFaker {
   }
 }
 
-/** A MAP schema generates 2 to 5 elements of its value type and a 10 character key
-  *
-  * @param schema
-  *   a schema of type MAP
-  */
-case class MapGenerator(schema: Schema) extends AvroFaker[Map[String, Any]] {
-  private val kFn: AvroFaker[String] = StringFaker.fake(Map.empty, ArgFaker)
-  private val vFn: AvroFaker[?] = AvroFaker(schema.getValueType)
-  def apply(ctx: FakerContext): Map[String, Any] =
-    Array.fill(2 + ctx.rnd.nextInt(3))(kFn.apply(ctx) -> vFn.apply(ctx)).toMap
+/** A faker that generates an array delegating to its item type. */
+private[this] case class MapFaker(lengthFn: AvroFaker[Long], keyFn: AvroFaker[String], fn: AvroFaker[_])
+    extends AvroFaker[Map[String, Any]] {
+  def apply(ctx: FakerContext): Map[String, Any] = Array.fill(lengthFn(ctx).toInt)(keyFn(ctx) -> fn.apply(ctx)).toMap
+}
+
+private[this] object MapFaker extends NumberFaker {
+  def apply(args: Map[String, Any]): MapFaker = {
+    MapFaker(
+      lengthFn = fake[Long]((-1, Int.MaxValue), args, ArgLength) match {
+        // Here, we replace the undesirable MaxValue random generator with a smaller constant.
+        case RandomFaker(ConstantFaker(-1L), ConstantFaker(Int.MaxValue)) => RandomFaker(3L, 6L)
+        case other                                                        => other
+      },
+      keyFn = StringFaker.fake(args, ArgKey),
+      fn = AvroFaker(args(ArgInternalSchema).asInstanceOf[Schema].getValueType, args)
+    )
+  }
 }
 
 /** A UNION schema generates any of its possible schemas with equal probability.

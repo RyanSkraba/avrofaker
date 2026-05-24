@@ -199,6 +199,7 @@ trait WithTester extends AnyFunSpecLike with Matchers {
         case other        => other
       }
     )
+    val Map = new Tester[Map[String, _]](Schema.Type.MAP, identity)
 
     def toLong(in: Any): Long = in match {
       case d: Double => d.toLong
