@@ -447,7 +447,13 @@ class AvroFakerSpec extends WithTester {
     )
 
     Tester.Array("should create arrays of its element type with a constant size")(
-      """{"items": {"type": "int", "step": 1}, "length": 2}""" -> Seq(Seq(0, 1), Seq(2, 3), Seq(4, 5), Seq(6, 7))
+      """{"items": {"type": "int", "step": 1}, "length": 2}""" -> Seq(Seq(0, 1), Seq(2, 3), Seq(4, 5), Seq(6, 7)),
+      """{"items": {"type": "int", "index": {"step": 1}, "oneof": [{"min": 100, "max": 110}, {"step": 1}, 999]}, "length": 3}""" -> Seq(
+        Seq(100, 0, 999),
+        Seq(108, 1, 999),
+        Seq(109, 2, 999),
+        Seq(107, 3, 999)
+      )
     )
 
     Tester.Array("should create STRING pairs of a constant size")(
@@ -509,6 +515,12 @@ class AvroFakerSpec extends WithTester {
         Map("Rv" -> 1041189272, "iI" -> 377907320),
         Map("jG" -> 1388566476, "UN" -> 19810223),
         Map("FR" -> 1342491603, "eb" -> 1023700812)
+      ),
+      """{"values": {"type": "int", "index": {"step": 1}, "oneof": [{"min": 100, "max": 110}, {"step": 1}, 999]}, "length": 3}""" -> Seq(
+        Map("CCz" -> 107, "NHB" -> 0, "FHu" -> 999),
+        Map("Rvb" -> 102, "1iI" -> 1, "19W" -> 999),
+        Map("jGG" -> 107, "8UN" -> 2, "Wut" -> 999),
+        Map("FRZ" -> 107, "Web" -> 3, "pA5" -> 999)
       )
     )
 

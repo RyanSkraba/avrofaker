@@ -314,26 +314,25 @@ Only one of the arguments `double`, `long`, `float`, `int` will be taken into ac
 Generating `ARRAY` data
 ------------------------------------------------------------------------------
 
-:warning: **DRAFT** :warning: **DRAFT** :warning: **DRAFT** :warning: This spec hasn't been implemented yet, the logic is still being worked out.
+An `ARRAY` is a composite type containing a collection of Avro data (all of the same type, found in the `items` attribute in the schema, also known as the element type).
 
-An `ARRAY` is a composite type containing a number of items.
-
-By default, it generates an list of three to five items, where each item is generated from the annotated items in the schema. 
+By default, it generates a list of three to five items.
+The `faker` annotations on the item type are used to generate each item.
 
 This strategy has the following arguments (which auto-select the strategy if no other strategy has been explicitly selected):
 
-- **length** allows you to create an `INT` that specifies the length of the `ARRAY` to create.
+- `length` allows you to create an `INT` that specifies the length of the `ARRAY` to create (i.e. the number of items it contains).
 
-
-| Schema                                                                      | Summary                                                                                                                                                    |
-|-----------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `{"type": "array", "items": "int"}`                                         | Generates random integer arrays: `[-845367200, -965429156, 604591031]`, `[-1316484263, -1333195387, 377907320, 1350546348, 1514351261]`...                 |
-| `{"type": "array", "items": "int", "length": {"min": 3, "max": 6}}`         | :arrow_up: Equivalent, but explicitly sets the length of each array.                                                                                       |
-| `{"type": "array", "items": "int", "length": 2}`                            | Generates random integer pairs: `[-1630935619, -1483802595]`, `[-864264928, -530909147]`...                                                                |
-| `{"type": "array", "items": {"type": "int", "step": 1}, "length": 2}`       | Generates a sequence of integer pairs: `[0,1]`, `[2,3]`, `[4,5]`...                                                                                        |
-| `{"type": "array", "items": "string", "length" : 2}`                        | Generates pairs of two letter Strings: `["CC", "zL"]`), `["NH", "BF"]`, `["Hu", "Rv"]`, `["bI", "1i"]`...  Note that the `length` argument is inherited! |
-| `{"type": "array", "items": {"type": "string", "length": 1}, "length" : 3}` | Generates triples of one letter Strings: `["A", "B", "B"]`, `["A", "A", "B"]`...                                                                           |
-| `{"type": "array", "min": 0, "max": 10, "items": "double"}`                  | Generates arrays of doubles, 0-9 numbers in an array, each number between [0,10).                                                                          |
+| Schema                                                                                                                                  | Summary                                                                                                                                                  |
+|-----------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `{"type": "array", "items": "int"}`                                                                                                     | Generates random integer arrays: `[-845367200, -965429156, 604591031]`, `[-1316484263, -1333195387, 377907320, 1350546348, 1514351261]`...               |
+| `{"type": "array", "items": "int", "length": {"min": 3, "max": 6}}`                                                                     | :arrow_up: Equivalent, but explicitly sets the length of each array.                                                                                     |
+| `{"type": "array", "items": "int", "length": 2}`                                                                                        | Generates random integer pairs: `[-1630935619, -1483802595]`, `[-864264928, -530909147]`...                                                              |
+| `{"type": "array", "items": {"type": "int", "step": 1}, "length": 2}`                                                                   | Generates a sequence of integer pairs: `[0,1]`, `[2,3]`, `[4,5]`...                                                                                      |
+| `{"type": "array", "items": {"type": "int", "index": {"step": 1}, "oneof": [{"min": 100, "max": 110}, {"step": 1}, 999]}, "length": 3}` | Generates a sequence of integer triples, each using a different generation strategy: `[100,0,999]`, `[109,1,999]`, `[109,2,999]`...                      |
+| `{"type": "array", "items": "string", "length" : 2}`                                                                                    | Generates pairs of two letter Strings: `["CC", "zL"]`), `["NH", "BF"]`, `["Hu", "Rv"]`, `["bI", "1i"]`...  Note that the `length` argument is inherited! |
+| `{"type": "array", "items": {"type": "string", "length": 1}, "length" : 3}`                                                             | Generates triples of one letter Strings: `["A", "B", "B"]`, `["A", "A", "B"]`...                                                                         |
+| `{"type": "array", "min": 0, "max": 10, "items": "double"}`                                                                             | Generates arrays of doubles, 0-9 numbers in an array, each number between [0,10).                                                                        |
 
 - TODO: **value** strategy creating a default value
 - TODO: resetting the sequence?
@@ -341,9 +340,27 @@ This strategy has the following arguments (which auto-select the strategy if no 
 Generating `MAP` data
 ------------------------------------------------------------------------------
 
-:warning: **DRAFT** :warning: **DRAFT** :warning: **DRAFT** :warning: This spec hasn't been implemented yet, the logic is still being worked out.
+A `MAP`, like an `ARRAY` is a composite type containing a collection of `STRING` keys and Avro data values (all values the same type, found in the `values` attribute in the schema).
 
-Generates an map of 3-5 elements with a random 10 character key and the value (according to it's annotated value type)
+By default, it generates a map with three to five items key/value pairs, where each key is String generated using the default **random** string strategy.
+The keys are always `STRING`, and the `faker` annotations on the value type are used to generate each value.
+
+This strategy has the following arguments (which auto-select the strategy if no other strategy has been explicitly selected):
+
+- `length` allows you to create an `INT` that specifies the length of the `MAP` to create (i.e. the number of key/value pairs it contains).
+- `key` allows you to select and configure the strategy for generating the keys.
+
+| Schema                                                                                                                                 | Summary                                                                                                                                                                 |
+|----------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `{"type": "map", "values": "int"}`                                                                                                     | Generates a random map three to five key/value pairs, using 10 character random strings as keys and random integers as values.                                          |
+| `{"type": "map", "values": "int", "key": {"length": 10}, "length": {"min": 3, "max": 6}}`                                              | `  :arrow_up: Equivalent, but explicitly sets the size of each map and the key function.                                                                                |
+| `{"type": "map", "values": "int", "length": 2}`                                                                                        | Each map contains exactly two key/value pairs, and `length` is inherited by the key generator, so the strings are 2 characters: `{"CC": 295101692, "HB": 604591031}`... |
+| `{"type": "map", "values": {"type": "int", "index": {"step": 1}, "oneof": [{"min": 100, "max": 110}, {"step": 1}, 999]}, "length": 3}` | Contains exactly three key/value pairs, each generated by a different strategy: `{"CCz": 107, "NHB": 0, "FHu": 999}`...                                                 |
+| `{"type": "map", "values": {"type": "int", "step": 1}, "length": 2}`                                                                   | Two key/value pairs and the integer values are an increasing sequence: `{"CC": 0, "zL": 1}`, `{"NH": 2, "BF": 3}`...                                                    |
+| `{"type": "map", "values": "string", "length" : 2}`                                                                                    | Two key/value pairs and both are 2 character strings: `{"CC": "zL", "NH": "BF"}`, `{"Hu": "Rv", "bI": "1i"}`...                                                         |
+| `{"type": "map", "values": {"type": "string", "length": 1}, "length" : 3}`                                                             | Three key/value pairs, keys are 3 characters and values are 1: `{"CCz": "L", "NHB": "F", "HuR": "v"}`...                                                                |
+| `{"type": "map", "min": 0, "max": 10, "values": "double"}`                                                                             | `  Zero to ten keys, each key has zero to ten characters and each value is a double from 0.0 to 10.0                                                                    |
+| `{"type": "map", "values": {"type": "int", "min": 10, "max": 100}, "key": {"expression": "#{Address.country}"}}`                       | Three to five key/value pairs, each key is a country name and each value is a random int between 10 and 100: `{"Luxembourg": 57, "France": 45, "Moldova": 93}`          |
 
 Generating `BYTES` data
 ------------------------------------------------------------------------------
