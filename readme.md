@@ -64,6 +64,10 @@ The strategies for `INT` data and their arguments include (bold attribute can be
 * **random** with `min` and `max` (default)
 * **gauss** with `min`, `max`, **`mean`** and **`stddev`**
 * **sequence** with `min`, `max`, **`start`** and **`step`**
+* **weights** with **`weights`**
+* **value** with **`value`**
+* **oneof** with **`oneof`** and **`index`** 
+* **sumof**, **productof**, **minof**, **maxof**, **meanof** are all aggregate strategies that have a single attribute of the same name.
 
 ### The **random** strategy with `INT`
 
@@ -144,6 +148,33 @@ A zero `step`, of course, starts and stays at `min` forever.
 | `{"type": "int", "start": 3, "min": 0, "max": 4, "step": 3}` | :arrow_up: Equivalent because of the wrapped remainder, but confusing.                                          |
 | `{"type": "int", "faker": {"start": 10, "max": 13}}`         | `10`, `11`, `12`, `0`, `1`, `2`, etc.                                                                           |
 | `{"type": "int", "max": 13, "faker": {"start": 10}}`         | :arrow_up: Equivalent, inheriting the `max` argument from the parent.                                           |
+
+### The **weights** strategy with `INT`
+
+:warning: **DRAFT** :warning: **DRAFT** :warning: **DRAFT** :warning: This spec hasn't been implemented yet, the logic is still being worked out.
+
+The **weights** strategy generates `INT` values non-uniformly starting at 0 up to `max`.
+The probability of a value being generated can be weighted by a value.
+
+This strategy has the following arguments (bolded arguments auto-select the strategy if no other has been explicitly selected):
+
+- `max` to specify the upper bounds (exclusive) of the generated value (default: 2147483647 for `INT`).
+- **`weights`** An array containing multipliers that affects how often a value is chosen relative to the others. 
+  Putting a `2` in an array otherwise containing only `1` causes the index of the `2` to be chosen twice as frequently as the others.
+  (default: `[]` for a uniform distribution).
+
+| Schema                                                                  | Summary                                                                                                                 |
+|-------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------|
+| `{"type": "int", "faker": "weights"}`                                   | Generates non-negative integers, uniformly.                                                                             |
+| `{"type": "int", "faker": "weights", "weights": []}`                    | :arrow_up: Equivalent, no weights are assigned.                                                                         |
+| `{"type": "int", "faker": "weights", "weights": [1]}`                   | :arrow_up: Equivalent. Zero is given a weight of `1`, which is the same as numbers not in the array.                    |
+| `{"type": "int", "weights": [1, 1]}`                                    | :arrow_up: Still equivalent, zero and 1 are given a weight of `1`, like all the other numbers.                          |
+| `{"type": "int", "max": 10, "weights": [0, 0, 1, 1, 0, 1, 0, 1, 0, 0]}` | Only choose prime numbers between 0 and 10.                                                                             |
+| `{"type": "int", "max": 10, "weights": [1, 2]}`                         | Twice the chance of picking `1` out of the single digit numbers.                                                        |
+| `{"type": "int", "max": 10, "weights": [1, 1, 1, 9]}`                   | 50% chance of picking `3` out of the single digit numbers.                                                              |
+| `{"type": "int", "max": 10, "weights": [7, 3.5, 3.5]}`                  | One third chance of picking `0`, a third picking `1` or `2` and one third picking the rest of the single digit numbers. |
+
+TODO: Use with **oneof** to show how to weight picking a strategy or value.
 
 ### The **value** strategy with `INT`
 
@@ -230,7 +261,7 @@ This strategy has the following argument:
 
 - `length` to specify the lower bounds (inclusive) of the generated value (default: `10`).
 - `min` to specify the lower bounds (inclusive) of the generated value (default: `0`, constrainted to non-negative).
-- `max` to specify the lower bounds (inclusive) of the generated value (default: **TODO**).
+- `max` to specify the lower bounds (inclusive) of the generated value (default: **TODO - should have a max?**).
 
 | Schema                                                           | Summary                                                                                           |
 |------------------------------------------------------------------|---------------------------------------------------------------------------------------------------|
@@ -242,13 +273,13 @@ This strategy has the following argument:
 | `{"type": "string", "length": {"min": 5, "max": 10}}`            | Uniformly generates a random string with a size bounded from `5` (inclusive) to `10` (exclusive). |
 | `{"type": "string", "min": 5, "length: {"max": 10}}`             | :arrow_up: Equivalent, because the `min` argument is taken from the parent.                       |
 | `{"type": "string", "min": 100, "length": {"min": 5, max": 10}}` | :arrow_up: Equivalent, because the `min` argument is ignored from the parent when it's supplied.  |
-| `{"type": "string", "max": 5, "max": 10, "length": {}}`          | :arrow_up: Equivalent, because both arguments are taken from the parent.                          |
-| `{"type": "string", "max": 5, "max": 10}`                        | Uniformly generates 10 character alphanumeric strings (the default `size` is used).               |
+| `{"type": "string", "min": 5, "max": 10, "length": {}}`          | :arrow_up: Equivalent, because both arguments are taken from the parent.                          |
+| `{"type": "string", "min": 5, "max": 10}`                        | Uniformly generates 10 character alphanumeric strings (the default `size` is used).               |
 
 ### The **value**, **oneof** and **sumof** strategy with `STRING`
 
 These two strategies both apply to `STRING` data as in `INT` data 
-- with **value** you can specify a values or a set of values to choose from randomly, and 
+- with **value**, you can specify a values or a set of values to choose from randomly, and 
 - **oneof** allows you to select from the set using an `INT` generator in the `index` argument, and
 - **sumof** concatenates the strings that it generates (the equivalent of `+` for numbers).
 
