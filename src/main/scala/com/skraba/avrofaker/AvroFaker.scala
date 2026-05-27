@@ -92,9 +92,9 @@ object AvroFaker {
       case Schema.Type.ARRAY   => ArrayFaker(args ++ getArgs(schema))
       case Schema.Type.MAP     => MapFaker(args ++ getArgs(schema))
       case Schema.Type.UNION   => UnionGenerator(schema)
-      case Schema.Type.FIXED   => FixedGenerator(schema)
+      case Schema.Type.FIXED   => BytesFaker(length = schema.getFixedSize)
       case Schema.Type.STRING  => StringFaker.fake(args ++ getArgs(schema), ArgFaker)
-      case Schema.Type.BYTES   => BytesGenerator(schema)
+      case Schema.Type.BYTES   => BytesFaker(args ++ getArgs(schema))
       case Schema.Type.INT     => IntFaker(args ++ getArgs(schema))
       case Schema.Type.LONG    => LongFaker(args ++ getArgs(schema))
       case Schema.Type.FLOAT   => FloatFaker(args ++ getArgs(schema))
@@ -174,8 +174,8 @@ case class EnumGenerator(schema: Schema) extends AvroFaker[String] with NumberFa
 }
 
 /** A faker that generates an array delegating to its item type. */
-private[this] case class ArrayFaker(lengthFn: AvroFaker[Long], fn: AvroFaker[_]) extends AvroFaker[Array[Any]] {
-  def apply(ctx: FakerContext): Array[Any] = Array.fill(lengthFn(ctx).toInt)(fn.apply(ctx))
+private[this] case class ArrayFaker(lengthFn: AvroFaker[Long], fn: AvroFaker[_]) extends AvroFaker[Seq[Any]] {
+  def apply(ctx: FakerContext): Seq[Any] = Seq.fill(lengthFn(ctx).toInt)(fn.apply(ctx))
 }
 
 private[this] object ArrayFaker extends NumberFaker {
@@ -219,15 +219,6 @@ private[this] object MapFaker extends NumberFaker {
 case class UnionGenerator(schema: Schema) extends AvroFaker[Any] {
   private val fns: Seq[AvroFaker[?]] = schema.getTypes.asScala.map(AvroFaker.apply).toSeq
   def apply(ctx: FakerContext): Any = fns(ctx.rnd.nextInt(fns.size)).apply(ctx)
-}
-
-/** A FIXED schema generates a byte array of the expected size.
-  *
-  * @param schema
-  *   a schema of type FIXED
-  */
-case class FixedGenerator(schema: Schema) extends AvroFaker[Array[Byte]] {
-  def apply(ctx: FakerContext): Array[Byte] = ctx.rnd.nextBytes(schema.getFixedSize)
 }
 
 /** A faker that generates a random string. */
@@ -326,15 +317,23 @@ private[this] object StringFaker {
   }
 }
 
-/** A BYTES schema generates a byte array between 5 and 10 bytes.
-  *
-  * @param schema
-  *   a schema of type BYTES
-  */
-case class BytesGenerator(schema: Schema) extends AvroFaker[Array[Byte]] {
-  def apply(ctx: FakerContext): Array[Byte] = ctx.rnd.nextBytes(5 + ctx.rnd.nextInt(5))
+/** A faker that generates byte arrays. */
+private[this] case class BytesFaker(lengthFn: AvroFaker[Long]) extends AvroFaker[Seq[Byte]] {
+  def apply(ctx: FakerContext): Seq[Byte] = ctx.rnd.nextBytes(lengthFn(ctx).toInt).toSeq
 }
 
+private[this] object BytesFaker extends NumberFaker {
+  def apply(args: Map[String, Any]): BytesFaker = {
+    BytesFaker(lengthFn = fake[Long]((-1, Int.MaxValue), args, ArgLength) match {
+      // Here, we replace the undesirable MaxValue random generator with a smaller constant.
+      case RandomFaker(ConstantFaker(-1L), ConstantFaker(Int.MaxValue)) => RandomFaker(16L, 33L)
+      case other                                                        => other
+    })
+  }
+  def apply(length: Int): BytesFaker = {
+    BytesFaker(lengthFn = ConstantFaker(length))
+  }
+}
 trait NumberFaker {
 
   /** Tests a numeric value and ensures that it is between the bounds (inclusive). */
@@ -452,8 +451,6 @@ trait NumberFaker {
   *
   * @param args
   *   The annotations that have been assigned to the schema, or to the faker strategy.
-  * @param dflts
-  *   If an argument is optional and not in the configuration, the value to use.
   */
 case class IntFaker(args: Map[String, Any]) extends AvroFaker[Int] with NumberFaker {
   private val fn = fake[Long]((Int.MinValue.toLong, Int.MaxValue.toLong), args, ArgFaker)
@@ -690,8 +687,6 @@ private[this] case class MeanOfFaker[T](fns: Seq[FakerContext => T])(implicit nu
   *
   * @param schema
   *   a schema of type BOOLEAN
-  * @param rnd
-  *   random number generator (for reproducibility if desired)
   */
 case class BooleanGenerator(schema: Schema) extends AvroFaker[Boolean] {
   def apply(ctx: FakerContext): Boolean = ctx.rnd.nextBoolean()

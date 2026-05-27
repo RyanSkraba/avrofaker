@@ -552,7 +552,7 @@ class AvroFakerSpec extends WithTester {
     )
 
     Tester.Map("should create maps with 0 to 10 keys containing doubles from 0 to 10")(
-      """{ "min": 0, "max": 10, "values": "double"}""" -> Seq(
+      """{"min": 0, "max": 10, "values": "double"}""" -> Seq(
         Map(),
         Map(
           "" -> 7.462414053223306,
@@ -604,16 +604,6 @@ class AvroFakerSpec extends WithTester {
       gen(ctx) shouldBe 4
       Option(gen(ctx)) shouldBe None
       gen(ctx) shouldBe 5
-    }
-  }
-
-  describe("Generating Avro FIXED data") {
-    it("should create byte arrays by default") {
-      val ctx = FakerContext(new Random(0))
-      val gen = AvroFaker(Schema.createFixed("Example", "", "", 4))
-      gen(ctx) shouldBe Array(96, -76, 32, -69)
-      gen(ctx) shouldBe Array(56, 81, -39, -44)
-      gen(ctx) shouldBe Array(122, -53, -109, 61)
     }
   }
 
@@ -733,14 +723,48 @@ class AvroFakerSpec extends WithTester {
     )
   }
 
-  describe("Generating Avro BYTES data") {
-    it("should create variable byte arrays by default") {
-      val ctx = FakerContext(new Random(0))
-      val gen = AvroFaker(Schema.create(Schema.Type.BYTES))
-      gen(ctx) shouldBe Array(56, 81, -39, -44, 122)
-      gen(ctx) shouldBe Array(-10, -55, 45, -93, 58, -16, 29)
-      gen(ctx) shouldBe Array(3, 37, -12, 29, 62, -70)
-    }
+  describe("Generate BYTES with the random strategy") {
+    val expected = Seq(
+      "OFHZ1HrLkz2+cDmb9sktozo=",
+      "AyX0HT66+JhtpxLIK81NVUvw",
+      "TenvnC+THvxYD5r7CBsS4Qex6AXytPXw8dAM",
+      "cJIcUFhn/yD2qDNemK+HJThVhrQf7/IFtOBaAAg="
+    )
+
+    Tester.Bytes("should generate with the defaults")(
+      """"bytes"""" -> expected,
+      """{"type": "bytes"}""" -> expected,
+      """{"length": {"min": 16, "max": 33}}""" -> expected
+    )
+
+    Tester.Bytes("should generate a constant length array")(
+      """{"length": 8}""" -> Seq("YLQguzhR2dQ=", "esuTPb5wOZs=", "9sktozrwHU8=", "t3DpjAMl9B0=")
+    )
+
+    Tester.Bytes("should generate an increasing array")(
+      """{"length": {"step": 1, "max": 32}}""" -> Seq(
+        "",
+        "YA==",
+        "OFE=",
+        "esuT",
+        "vnA5mw==",
+        "9sktozo=",
+        "t3DpjAMl",
+        "Prr4mG2nEg==",
+        "K81NVUvwtUA=",
+        "I8KbYk3p75wv",
+        "WA+a+wgbEuEHsQ=="
+      )
+    )
+  }
+
+  describe("Generate FIXED with the random strategy") {
+    val expected = Seq("YLQguw==", "OFHZ1A==", "esuTPQ==", "vnA5mw==")
+
+    Tester.Fixed("should generate with the defaults")(
+      """{"type": "fixed", "name": "f4", "size": 4}""" -> expected,
+      """{"name": "f4", "size": 4}""" -> expected
+    )
   }
 
   describe("Generating Avro BOOLEAN data") {

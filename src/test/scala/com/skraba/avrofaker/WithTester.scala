@@ -34,10 +34,10 @@ trait WithTester extends AnyFunSpecLike with Matchers {
       *   The schema with the helper type inserted.
       */
     def adaptSchemaWithType(schema: String): String = schema match {
-      case _ if schema.contains("<TYPE>") => schema.replace("<TYPE>", sType.toString.toLowerCase())
-      case _ if schema.startsWith("{") =>
-        s"""{"type": "${sType.toString.toLowerCase}", ${schema.substring(1)}"""
-      case _ => schema
+      case _ if schema.contains("<TYPE>")                     => schema.replace("<TYPE>", sType.toString.toLowerCase())
+      case _ if schema == s"""{"type": "${sType.getName}"}""" => schema
+      case _ if schema.startsWith("{") => s"""{"type": "${sType.getName}", ${schema.substring(1)}"""
+      case _                           => schema
     }
 
     /** @param schema
@@ -200,6 +200,28 @@ trait WithTester extends AnyFunSpecLike with Matchers {
       }
     )
     val Map = new Tester[Map[String, _]](Schema.Type.MAP, identity)
+    val Bytes = new Tester[Seq[Byte]](
+      Schema.Type.BYTES,
+      {
+        case xs: Iterable[_] => new String(java.util.Base64.getEncoder.encode(xs.map(toByte).toArray))
+        case other           => other
+      }
+    )
+    val Fixed = new Tester[Seq[Byte]](
+      Schema.Type.FIXED,
+      {
+        case xs: Iterable[_] => new String(java.util.Base64.getEncoder.encode(xs.map(toByte).toArray))
+        case other           => other
+      }
+    )
+
+    def toByte(in: Any): Byte = in match {
+      case b: Byte   => b
+      case d: Double => d.toByte
+      case i: Int    => i.toByte
+      case l: Long   => l.toByte
+      case other     => Try(other.toString.toByte).orElse(Try(other.toString.toDouble.toByte)).get
+    }
 
     def toLong(in: Any): Long = in match {
       case d: Double => d.toLong
