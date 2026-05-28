@@ -6,10 +6,10 @@ import org.apache.avro.Schema
 import org.apache.avro.Schema.Field
 import org.apache.avro.generic.{GenericRecord, GenericRecordBuilder}
 
-import scala.collection.immutable.ListMap
 import scala.jdk.CollectionConverters._
-import scala.math.Numeric.{DoubleIsFractional, FloatIsFractional, IntIsIntegral, LongIsIntegral}
-import scala.util.{Random, Try}
+import scala.collection.immutable.ListMap
+import scala.math.Numeric._
+import scala.util.Random
 
 /** The context used to generate a new data. */
 case class FakerContext(rnd: Random = new Random())
@@ -87,8 +87,11 @@ object AvroFaker {
 
   def apply(schema: Schema, args: Map[String, Any]): AvroFaker[_] = {
     schema.getType match {
-      case Schema.Type.RECORD  => RecordGenerator(schema)
-      case Schema.Type.ENUM    => EnumGenerator(schema)
+      case Schema.Type.RECORD => RecordGenerator(schema)
+      case Schema.Type.ENUM =>
+        val fns = schema.getEnumSymbols.asScala.toSeq.map(ConstantFaker[String])
+        val indexFn = OneOfFaker.fake[Int]((0, fns.size), args ++ getArgs(schema), ArgIndex)
+        OneOfFaker(indexFn, fns)
       case Schema.Type.ARRAY   => ArrayFaker(args ++ getArgs(schema))
       case Schema.Type.MAP     => MapFaker(args ++ getArgs(schema))
       case Schema.Type.UNION   => UnionGenerator(schema)
@@ -138,7 +141,7 @@ private[this] case class RandomOneOfFaker[T](fns: Seq[AvroFaker[T]]) extends Avr
 private[this] case class OneOfFaker[T](indexFn: AvroFaker[Int], fns: Seq[AvroFaker[T]])
     extends AvroFaker[T]
     with NumberFaker {
-  def apply(ctx: FakerContext): T = fns((indexFn(ctx) max 0 min (fns.size - 1)).toInt)(ctx)
+  def apply(ctx: FakerContext): T = fns((indexFn(ctx) max 0 min (fns.size - 1)))(ctx)
 }
 
 private[this] object OneOfFaker extends NumberFaker {

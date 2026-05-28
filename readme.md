@@ -429,9 +429,19 @@ By default, it generates a sequence of uniformly distributed bytes of the requir
 Generating `ENUM` data
 ------------------------------------------------------------------------------
 
-:warning: **DRAFT** :warning: **DRAFT** :warning: **DRAFT** :warning: This spec hasn't been implemented yet, the logic is still being worked out.
+An `ENUM` data contains a string that corresponds to one of the enumeration symbols in the schema.
 
-Randomly picks a symbol.
+This works exactly as the `STRING` **oneof** strategy using the possible symbol names as the values to pick from.
+
+This strategy has the following argument:
+
+- `index` to specify which index to use to pick the strategy (default: Uniformly distributed among the possible indices)
+  If the `index` is a generator, it has an implicit `min` and `max` corresponding to the size of the array.
+
+| Schema                                                                              | Summary                           |
+|-------------------------------------------------------------------------------------|-----------------------------------|
+| `{"type": "enum", "name": "abc", "symbols": ["A", "B", "C"]}`                       | Randomly picks one of the symbols |
+| `{"type": "enum", "name": "abc", "symbols": ["A", "B", "C"], "index": {"step": 1}}` | Cycles through the symbols        |
 
 Generating `UNION` data
 ------------------------------------------------------------------------------

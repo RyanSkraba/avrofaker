@@ -395,29 +395,20 @@ class AvroFakerSpec extends WithTester {
   }
 
   describe("Generating Avro ENUM data") {
-    it("should pick symbols randomly") {
-      val schema = SchemaBuilder.enumeration("Example").symbols("A", "B", "C", "D", "E")
-      val ctx = FakerContext(new Random(0))
-      val gen = AvroFaker(schema)
-      gen.apply(ctx) shouldBe "A"
-      gen.apply(ctx) shouldBe "D"
-      gen.apply(ctx) shouldBe "E"
-    }
+    Tester.Enum("should pick symbols randomly by default")(
+      """{"name": "abc", "symbols": ["A", "B", "C"]}""",
+      new Tester.Enum.Dist("A" -> 1023, "B" -> 982, "C" -> 995)
+    )
 
-    it("should pick symbols sequentially") {
-      Tester.String
-        .generate(SchemaBuilder.enumeration("Example").symbols("A", "B", "C", "D", "E"), ArgStep -> 1)
-        .take(10) shouldBe Seq("A", "B", "C", "D", "E", "A", "B", "C", "D", "E")
-    }
+    Tester.Enum("should pick a gaussian distribution of elements")(
+      """{"name": "abc", "symbols": ["A", "B", "C", "D", "E", "F", "G"], "index": {"mean": 3.5, "stddev": 1}}""",
+      new Tester.Enum.Dist("A" -> 61, "B" -> 626, "C" -> 2409, "D" -> 3857, "E" -> 2406, "F" -> 595, "G" -> 46)
+    )
 
-    it("should pick symbols sequentially with a step") {
-      Tester.String
-        .generate(
-          SchemaBuilder.enumeration("Example").symbols("A", "B", "C", "D", "E"),
-          ArgStep -> 3
-        )
-        .take(10) shouldBe Seq("A", "D", "B", "E", "C", "A", "D", "B", "E", "C")
-    }
+    Tester.Enum("should step through the symbols")(
+      """{"name": "abc", "symbols": ["A", "B", "C"], "index": {"step": 1}}""" -> Seq("A", "B", "C", "A", "B", "C"),
+      """{"name": "abc", "symbols": ["A", "B", "C"], "step": 1, "index": {}}""" -> Seq("A", "B", "C", "A", "B", "C")
+    )
   }
 
   describe("Generating Avro ARRAY data") {
@@ -685,6 +676,7 @@ class AvroFakerSpec extends WithTester {
 
     Tester.String("should cycle through the elements")(
       """{"oneof": ["ABC", "BCD", "CDE"], "index": {"step": 1}}""" -> Seq("ABC", "BCD", "CDE", "ABC", "BCD", "CDE")
+      // TODO: """{"oneof": ["ABC", "BCD", "CDE"], "step": 1}""" -> Seq("ABC", "BCD", "CDE", "ABC", "BCD", "CDE")
     )
 
     Tester.String("should pick a gaussian distribution of elements")(

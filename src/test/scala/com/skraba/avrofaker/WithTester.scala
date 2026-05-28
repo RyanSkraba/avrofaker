@@ -214,6 +214,7 @@ trait WithTester extends AnyFunSpecLike with Matchers {
         case other           => other
       }
     )
+    val Enum = new Tester[String](Schema.Type.ENUM, identity)
 
     def toByte(in: Any): Byte = in match {
       case b: Byte   => b
