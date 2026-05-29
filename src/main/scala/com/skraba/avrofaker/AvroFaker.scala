@@ -141,7 +141,7 @@ private[this] case class RandomOneOfFaker[T](fns: Seq[AvroFaker[T]]) extends Avr
 private[this] case class OneOfFaker[T](indexFn: AvroFaker[Int], fns: Seq[AvroFaker[T]])
     extends AvroFaker[T]
     with NumberFaker {
-  def apply(ctx: FakerContext): T = fns((indexFn(ctx) max 0 min (fns.size - 1)))(ctx)
+  def apply(ctx: FakerContext): T = fns(indexFn(ctx) max 0 min (fns.size - 1))(ctx)
 }
 
 private[this] object OneOfFaker extends NumberFaker {
@@ -163,17 +163,6 @@ case class RecordGenerator(schema: Schema) extends AvroFaker[GenericRecord] {
     fn.map { case (f, fgen) => rb.set(f, fgen.apply(ctx)) }
     rb.build()
   }
-}
-
-/** An ENUM schema generates its Enum symbols (as strings) with equal probability.
-  *
-  * @param schema
-  *   a schema of type RECORD
-  */
-case class EnumGenerator(schema: Schema) extends AvroFaker[String] with NumberFaker {
-  private val symbols = schema.getEnumSymbols.asScala.toSeq
-  val indexFn: FakerContext => Long = fake[Long]((0L, symbols.size.toLong), getArgs(schema), ArgFaker)
-  def apply(ctx: FakerContext): String = symbols(indexFn(ctx).toInt)
 }
 
 /** A faker that generates an array delegating to its item type. */
@@ -241,7 +230,7 @@ private[this] object StringRandomFaker extends NumberFaker {
 
 /** A faker that uses DataFaker to generate a string. */
 private[this] case class StringExpressionFaker(expressionFn: AvroFaker[String]) extends AvroFaker[String] {
-  var faker: Option[Faker] = None
+  private var faker: Option[Faker] = None
   def apply(ctx: FakerContext): String = {
     if (faker.isEmpty) faker = Some(new Faker(new java.util.Random(ctx.rnd.nextLong())))
     faker.get.expression(expressionFn(ctx))
@@ -305,7 +294,6 @@ private[this] object StringFaker {
     value match {
       case Some(m: Map[_, _]) =>
         // A map, or object, adds attributes to the strategy that can complete how it is interpreted.
-        val mm = m.asInstanceOf[Map[String, Any]]
         fake(args.removed(key).removed(ArgFaker) ++ m.asInstanceOf[Map[String, Any]], ArgFaker, dflt)
       case Some(xs: Iterable[_]) =>
         // An array is, by default, a list of strategies that we randomly pick one from.
@@ -349,7 +337,7 @@ trait NumberFaker {
     * only use Doubles and Longs, which are set to the bounds or precision of Int and Float at the last minute, but we
     * handle Integers just in case they are explicitly set.
     */
-  def toNumOption[T](value: Any)(implicit num: Numeric[T]): Option[T] = {
+  private def toNumOption[T](value: Any)(implicit num: Numeric[T]): Option[T] = {
     val pass1: Option[Any] = Option((num, value)).collect {
       case (_, b: Byte)                       => num.fromInt(b)
       case (_, s: Short)                      => num.fromInt(s)
@@ -435,7 +423,6 @@ trait NumberFaker {
     value match {
       case Some(m: Map[_, _]) =>
         // A map, or object, adds attributes to the strategy that can complete how it is interpreted.
-        val mm = m.asInstanceOf[Map[String, Any]]
         fake[T](bounds, args.removed(key).removed(ArgFaker) ++ m.asInstanceOf[Map[String, Any]], ArgFaker, dflt)
       case Some(xs: Iterable[_]) =>
         // An array is, by default, a list of strategies that we randomly pick one from.

@@ -1,9 +1,8 @@
 package com.skraba.avrofaker
 
-import com.skraba.avrofaker.AvroFaker._
 import org.apache.avro.generic.GenericRecordBuilder
 import org.apache.avro.{Schema, SchemaBuilder}
-import scala.util.{Random, Try}
+import scala.util.Random
 
 class AvroFakerSpec extends WithTester {
 
