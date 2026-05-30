@@ -34,7 +34,7 @@ trait WithTester extends AnyFunSpecLike with Matchers {
       *   The schema with the helper type inserted.
       */
     def adaptSchemaWithType(schema: String): String = schema match {
-      case _ if schema.contains("<TYPE>")                     => schema.replace("<TYPE>", sType.toString.toLowerCase())
+      case _ if schema.contains("<TYPE>") => schema.replace("<TYPE>", sType.toString.toLowerCase())
       case _ if schema == s"""{"type": "${sType.getName}"}""" => schema
       case _ if schema.startsWith("{") => s"""{"type": "${sType.getName}", ${schema.substring(1)}"""
       case _                           => schema
@@ -65,12 +65,11 @@ trait WithTester extends AnyFunSpecLike with Matchers {
     def generate(schema: Schema, props: (String, Any)*): LazyList[T] = {
       val ctx = FakerContext(new Random(0))
       val gen = AvroFaker(applyProps(schema, props: _*))
-      LazyList.continually(gen(ctx)).flatMap {
-        case good: T => Some(good)
-        case bad     =>
-          // This will fail here
-          bad shouldBe a[T]
-          None
+      LazyList.continually(gen(ctx)).map {
+        case null => null.asInstanceOf[T]
+        case x =>
+          x shouldBe a[T]
+          x.asInstanceOf[T]
       }
     }
 
@@ -215,6 +214,7 @@ trait WithTester extends AnyFunSpecLike with Matchers {
       }
     )
     val Enum = new Tester[String](Schema.Type.ENUM, identity)
+    val Union = new Tester[Any](Schema.Type.UNION, identity)
 
     def toByte(in: Any): Byte = in match {
       case b: Byte   => b

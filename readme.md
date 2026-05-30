@@ -446,9 +446,24 @@ This strategy has the following argument:
 Generating `UNION` data
 ------------------------------------------------------------------------------
 
-:warning: **DRAFT** :warning: **DRAFT** :warning: **DRAFT** :warning: This spec hasn't been implemented yet, the logic is still being worked out.
+A `UNION` is a composite type containing a single Avro data that can be any one of a collection of types.
+The `faker` annotations on the union types are used to generate each item.
 
-Generates one of the values, uniformly picking one randomly.
+A union can't have any properties to configure itself.
+To get around this, its arguments are placed in the first union type under the `union` property.
+
+This strategy has the following argument (which auto-select the strategy if no other strategy has been explicitly selected):
+
+This strategy has the following argument:
+
+- `index` to specify which index to use to pick the type to generate (default: Uniformly distributed among the possible types)
+  If the `index` is a generator, it has an implicit `min` and `max` corresponding to the number of types available.
+
+| Schema                                                                             | Summary                                                     |
+|------------------------------------------------------------------------------------|-------------------------------------------------------------|
+| `["int", "null"]`                                                                  | Generates **random** ints and `null` about 50% of the time. |
+| `[{"type", "int"}, "null"]`                                                        | :arrow_up: Avro equivalent.                                 |
+| `[{"type": "string", "union": {"index": {"step": 1}}, {"type": "int", "step": 2}]` | Alternates between a sequence of strings and even numbers.  |
 
 Generating `BOOLEAN` data
 ------------------------------------------------------------------------------

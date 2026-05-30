@@ -582,19 +582,25 @@ class AvroFakerSpec extends WithTester {
   }
 
   describe("Generating Avro UNION data") {
-    it("should generate data from the union types with equal probability") {
-      val ctx = FakerContext(new Random(0))
-      val gen = AvroFaker(Schema.createUnion(Schema.create(Schema.Type.NULL), IntSequence))
-      gen(ctx) shouldBe 0
-      gen(ctx) shouldBe 1
-      Option(gen(ctx)) shouldBe None
-      gen(ctx) shouldBe 2
-      gen(ctx) shouldBe 3
-      Option(gen(ctx)) shouldBe None
-      gen(ctx) shouldBe 4
-      Option(gen(ctx)) shouldBe None
-      gen(ctx) shouldBe 5
-    }
+    val expected = Seq(null, null, -1483802595, null, -1431902571, 1041189272, null, null, -483282681, 1388566476)
+
+    Tester.Union("should generate data from the union types with equal probability")(
+      """["int", "null"]""" -> expected,
+      """[{"type": "int"}, "null"]""" -> expected,
+      """["int", {"type": "null"}]""" -> expected,
+      """[{"type": "int"}, {"type": "null"}]""" -> expected,
+      """[{"type": "int", "faker": "random"}, {"type": "null"}]""" -> expected
+    )
+
+    Tester.Union("should allow the index to be specified in the first union element")(
+      """[{
+        |  "type": "string",
+        |  "union": {"index": {"step": 1}}
+        |}, {
+        |  "type": "int",
+        |  "step": 2
+        |}]""".stripMargin -> Seq("CCzLNHBFHu", 0, "RvbI1iI19W", 2, "jGGR8UNWut", 4, "FRZvWebpA5", 6, "WHfyqts0co", 8)
+    )
   }
 
   describe("Generate STRING with the random strategy") {

@@ -92,9 +92,21 @@ object AvroFaker {
         val fns = schema.getEnumSymbols.asScala.toSeq.map(ConstantFaker[String])
         val indexFn = OneOfFaker.fake[Int]((0, fns.size), args ++ getArgs(schema), ArgIndex)
         OneOfFaker(indexFn, fns)
-      case Schema.Type.ARRAY   => ArrayFaker(args ++ getArgs(schema))
-      case Schema.Type.MAP     => MapFaker(args ++ getArgs(schema))
-      case Schema.Type.UNION   => UnionGenerator(schema)
+      case Schema.Type.ARRAY => ArrayFaker(args ++ getArgs(schema))
+      case Schema.Type.MAP   => MapFaker(args ++ getArgs(schema))
+      case Schema.Type.UNION =>
+        val fns = schema.getTypes.asScala.toSeq.map(apply).map(_.asInstanceOf[AvroFaker[Any]])
+        val indexFn = OneOfFaker.fake[Int](
+          (0, fns.size),
+          args ++ schema.getTypes.asScala.headOption
+            .map(getArgs)
+            .flatMap(_.get("union"))
+            .collect { case m: Map[_, _] => m }
+            .map(_.asInstanceOf[Map[String, Any]])
+            .getOrElse(Map.empty[String, Any]),
+          ArgIndex
+        )
+        OneOfFaker[Any](indexFn, fns)
       case Schema.Type.FIXED   => BytesFaker(length = schema.getFixedSize)
       case Schema.Type.STRING  => StringFaker.fake(args ++ getArgs(schema), ArgFaker)
       case Schema.Type.BYTES   => BytesFaker(args ++ getArgs(schema))
@@ -201,16 +213,6 @@ private[this] object MapFaker extends NumberFaker {
       fn = AvroFaker(args(ArgInternalSchema).asInstanceOf[Schema].getValueType, args)
     )
   }
-}
-
-/** A UNION schema generates any of its possible schemas with equal probability.
-  *
-  * @param schema
-  *   a schema of type UNION
-  */
-case class UnionGenerator(schema: Schema) extends AvroFaker[Any] {
-  private val fns: Seq[AvroFaker[?]] = schema.getTypes.asScala.map(AvroFaker.apply).toSeq
-  def apply(ctx: FakerContext): Any = fns(ctx.rnd.nextInt(fns.size)).apply(ctx)
 }
 
 /** A faker that generates a random string. */
