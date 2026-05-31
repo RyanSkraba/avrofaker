@@ -114,8 +114,8 @@ object AvroFaker {
       case Schema.Type.LONG    => LongFaker(args ++ getArgs(schema))
       case Schema.Type.FLOAT   => FloatFaker(args ++ getArgs(schema))
       case Schema.Type.DOUBLE  => DoubleFaker(args ++ getArgs(schema))
-      case Schema.Type.BOOLEAN => BooleanGenerator(schema)
-      case Schema.Type.NULL    => NullGenerator(schema)
+      case Schema.Type.BOOLEAN => BooleanFaker(args ++ getArgs(schema))
+      case Schema.Type.NULL    => NullFaker
     }
   }
 
@@ -341,6 +341,10 @@ trait NumberFaker {
     */
   private def toNumOption[T](value: Any)(implicit num: Numeric[T]): Option[T] = {
     val pass1: Option[Any] = Option((num, value)).collect {
+      case (_, false)                         => num.zero
+      case (_, true)                          => num.one
+      case (_, "false")                       => num.zero
+      case (_, "true")                        => num.one
       case (_, b: Byte)                       => num.fromInt(b)
       case (_, s: Short)                      => num.fromInt(s)
       case (_, i: Int)                        => num.fromInt(i)
@@ -675,20 +679,17 @@ private[this] case class MeanOfFaker[T](fns: Seq[FakerContext => T])(implicit nu
   }
 }
 
-/** A BOOLEAN schema generates random true/false.
+/** Generates Boolean values with a specific strategy given by the schema properties.
   *
-  * @param schema
-  *   a schema of type BOOLEAN
+  * @param args
+  *   The annotations that have been assigned to the schema, or to the faker strategy.
   */
-case class BooleanGenerator(schema: Schema) extends AvroFaker[Boolean] {
-  def apply(ctx: FakerContext): Boolean = ctx.rnd.nextBoolean()
+case class BooleanFaker(args: Map[String, Any]) extends AvroFaker[Boolean] with NumberFaker {
+  private val fn = fake[Long]((0, 2), args, ArgFaker)
+  def apply(ctx: FakerContext): Boolean = fn(ctx) != 0
 }
 
-/** A NULL schema generates only null.
-  *
-  * @param schema
-  *   a schema of type NULL
-  */
-case class NullGenerator(schema: Schema) extends AvroFaker[Void] {
+/** A NULL schema generates only null. */
+case object NullFaker extends AvroFaker[Void] {
   def apply(ctx: FakerContext): Void = null
 }

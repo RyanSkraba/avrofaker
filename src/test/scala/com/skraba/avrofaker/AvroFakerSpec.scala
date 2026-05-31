@@ -6,8 +6,6 @@ import scala.util.Random
 
 class AvroFakerSpec extends WithTester {
 
-  val IntSequence: Schema = new Schema.Parser().parse("""{"type": "int", "step": 1}""")
-
   def randomStrategy[T](it: NumericTester[T]): Unit = {
     describe(s"Generate ${it.sType} with the random strategy") {
 
@@ -376,6 +374,8 @@ class AvroFakerSpec extends WithTester {
   aggregateStrategies(Tester.Double)
 
   describe("Generating Avro RECORD data") {
+    val IntSequence: Schema = new Schema.Parser().parse("""{"type": "int", "step": 1}""")
+
     it("should create ten character strings by default") {
       val schema = SchemaBuilder
         .record("Example")
@@ -761,6 +761,28 @@ class AvroFakerSpec extends WithTester {
     Tester.Fixed("should generate with the defaults")(
       """{"type": "fixed", "name": "f4", "size": 4}""" -> expected,
       """{"name": "f4", "size": 4}""" -> expected
+    )
+  }
+
+  describe("Generate BOOLEAN data") {
+    val expected = Seq(true, true, false, true, true, false, true, false, true, true)
+
+    Tester.Boolean("should generate with the defaults")(
+      """"boolean"""" -> expected,
+      """{"type": "boolean"}""" -> expected
+    )
+
+    Tester.Boolean("should alternate between false and true")(
+      """{"step": 1}""" -> Seq(false, true, false, true, false, true, false, true, false, true),
+      """{"step": 1, "start": true}""" -> Seq(true, false, true, false, true, false, true, false, true, false),
+      """{"step": 1, "start": "true"}""" -> Seq(true, false, true, false, true, false, true, false, true, false)
+    )
+  }
+
+  describe("Generate NULL data") {
+    Tester.Null("should generate with the defaults")(
+      """"null"""" -> Seq.fill(10)(null),
+      """{"type": "null"}""" -> Seq.fill(10)(null)
     )
   }
 

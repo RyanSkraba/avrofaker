@@ -34,7 +34,7 @@ trait WithTester extends AnyFunSpecLike with Matchers {
       *   The schema with the helper type inserted.
       */
     def adaptSchemaWithType(schema: String): String = schema match {
-      case _ if schema.contains("<TYPE>") => schema.replace("<TYPE>", sType.toString.toLowerCase())
+      case _ if schema.contains("<TYPE>")                     => schema.replace("<TYPE>", sType.toString.toLowerCase())
       case _ if schema == s"""{"type": "${sType.getName}"}""" => schema
       case _ if schema.startsWith("{") => s"""{"type": "${sType.getName}", ${schema.substring(1)}"""
       case _                           => schema
@@ -215,6 +215,8 @@ trait WithTester extends AnyFunSpecLike with Matchers {
     )
     val Enum = new Tester[String](Schema.Type.ENUM, identity)
     val Union = new Tester[Any](Schema.Type.UNION, identity)
+    val Boolean = new Tester[Boolean](Schema.Type.BOOLEAN, identity)
+    val Null = new Tester[Any](Schema.Type.NULL, identity)
 
     def toByte(in: Any): Byte = in match {
       case b: Byte   => b

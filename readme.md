@@ -468,14 +468,26 @@ This strategy has the following argument:
 Generating `BOOLEAN` data
 ------------------------------------------------------------------------------
 
-:warning: **DRAFT** :warning: **DRAFT** :warning: **DRAFT** :warning: This spec hasn't been implemented yet, the logic is still being worked out.
+The `BOOLEAN` type can contain either true or false.
 
-Generates `true` or `false`, uniformly picking one randomly.
+All the strategies that can be used to generate an `INT` can be used to generate a boolean, which acts like a whole number with only the value values of zero and one.
+Zero corresponds to false.
+
+| Schema                           | Summary                                                |
+|----------------------------------|--------------------------------------------------------|
+| `"boolean"`                      | Generates a random boolean value, equally distributed. |
+| `{"type", "boolean"}`            | :arrow_up: Avro equivalent.                            |
+| `{"type", "boolean", "step": 1}` | Alternates true and false, starting on false.          |
 
 Generating `NULL` data
 ------------------------------------------------------------------------------
 
 There is no strategy to generate `NULL` data: it's always `null`.
+
+| Schema             | Summary                     |
+|--------------------|-----------------------------|
+| `"null"`           | Generates `null`.           |
+| `{"type", "null"}` | :arrow_up: Avro equivalent. |
 
 Generating `RECORD` data
 ------------------------------------------------------------------------------
