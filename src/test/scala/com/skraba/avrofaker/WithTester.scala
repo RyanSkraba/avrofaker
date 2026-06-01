@@ -1,6 +1,7 @@
 package com.skraba.avrofaker
 
 import org.apache.avro.Schema
+import org.apache.avro.generic.IndexedRecord
 import org.scalatest.funspec.AnyFunSpecLike
 import org.scalatest.Assertion
 import org.scalatest.matchers.should.Matchers
@@ -217,6 +218,7 @@ trait WithTester extends AnyFunSpecLike with Matchers {
     val Union = new Tester[Any](Schema.Type.UNION, identity)
     val Boolean = new Tester[Boolean](Schema.Type.BOOLEAN, identity)
     val Null = new Tester[Any](Schema.Type.NULL, identity)
+    val Record = new Tester[IndexedRecord](Schema.Type.RECORD, _.toString)
 
     def toByte(in: Any): Byte = in match {
       case b: Byte   => b

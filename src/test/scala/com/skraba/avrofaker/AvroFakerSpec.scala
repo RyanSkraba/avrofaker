@@ -374,23 +374,26 @@ class AvroFakerSpec extends WithTester {
   aggregateStrategies(Tester.Double)
 
   describe("Generating Avro RECORD data") {
-    val IntSequence: Schema = new Schema.Parser().parse("""{"type": "int", "step": 1}""")
-
-    it("should create ten character strings by default") {
-      val schema = SchemaBuilder
-        .record("Example")
-        .fields()
-        .name("id")
-        .`type`(IntSequence)
-        .noDefault()
-        .requiredString("name")
-        .endRecord()
-      val ctx = FakerContext(new Random(0))
-      val gen = AvroFaker(schema)
-      gen.apply(ctx) shouldBe new GenericRecordBuilder(schema).set("id", 0).set("name", "CCzLNHBFHu").build()
-      gen.apply(ctx) shouldBe new GenericRecordBuilder(schema).set("id", 1).set("name", "RvbI1iI19W").build()
-      gen.apply(ctx) shouldBe new GenericRecordBuilder(schema).set("id", 2).set("name", "jGGR8UNWut").build()
-    }
+    Tester.Record("should create an simple record")(
+      """{  "type": "record",
+       |  "name": "A",
+       |  "fields": [
+       |    {"name": "a1", "type": "int", "step": 1},
+       |    {"name": "a2", "type": "string", "expression": "#{Name.first_name}"}
+       |  ]
+       |}""".stripMargin -> Seq(
+        """{"a1": 0, "a2": "Kit"}""",
+        """{"a1": 1, "a2": "Barry"}""",
+        """{"a1": 2, "a2": "Dionne"}""",
+        """{"a1": 3, "a2": "Carola"}""",
+        """{"a1": 4, "a2": "Jessenia"}""",
+        """{"a1": 5, "a2": "Roger"}""",
+        """{"a1": 6, "a2": "Joleen"}""",
+        """{"a1": 7, "a2": "Oliver"}""",
+        """{"a1": 8, "a2": "Robbie"}""",
+        """{"a1": 9, "a2": "Jean"}"""
+      )
+    )
   }
 
   describe("Generating Avro ENUM data") {

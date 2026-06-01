@@ -492,9 +492,13 @@ There is no strategy to generate `NULL` data: it's always `null`.
 Generating `RECORD` data
 ------------------------------------------------------------------------------
 
-:warning: **DRAFT** :warning: **DRAFT** :warning: **DRAFT** :warning: This spec hasn't been implemented yet, the logic is still being worked out.
+A `RECORD` is a composite type containing a collection of Avro data called fields.
+Each field has a name and a type, and the annotated type is used to generate data for the field.
+Properties on the field are also applied to the strategy.
 
-Generates a GenericRecord with a field for each according to its annotated type.
+| Schema                                                                                                                                                        | Summary                                                               |
+|---------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------|
+| `{"type": "record", "name": "A", "fields": [{"name": "a1", "type": "int", "step": 1}, {"name": "a2", "type": "string", "expression": "#{Name.first_name}"}]}` | Generate a two field record with an incrementing ID and a first name. |
 
 Using
 ------------------------------------------------------------------------------

@@ -4,7 +4,7 @@ import com.skraba.avrofaker.AvroFaker._
 import net.datafaker.Faker
 import org.apache.avro.Schema
 import org.apache.avro.Schema.Field
-import org.apache.avro.generic.{GenericRecord, GenericRecordBuilder}
+import org.apache.avro.generic.{GenericRecordBuilder, IndexedRecord}
 
 import scala.jdk.CollectionConverters._
 import scala.collection.immutable.ListMap
@@ -87,7 +87,7 @@ object AvroFaker {
 
   def apply(schema: Schema, args: Map[String, Any]): AvroFaker[_] = {
     schema.getType match {
-      case Schema.Type.RECORD => RecordGenerator(schema)
+      case Schema.Type.RECORD => RecordFaker(args ++ getArgs(schema))
       case Schema.Type.ENUM =>
         val fns = schema.getEnumSymbols.asScala.toSeq.map(ConstantFaker[String])
         val indexFn = OneOfFaker.fake[Int]((0, fns.size), args ++ getArgs(schema), ArgIndex)
@@ -121,10 +121,11 @@ object AvroFaker {
 
   def apply(schema: Schema): AvroFaker[_] = apply(schema, Map.empty)
 
-  def getArgs(in: Schema): Map[String, Any] = {
+  def getArgs(in: Any): Map[String, Any] = {
     def adapt(in: Any): Any = {
       in match {
         case schema: Schema           => adapt(schema.getObjectProps)
+        case field: Schema.Field      => adapt(field.getObjectProps)
         case map: java.util.Map[_, _] => map.asScala.map { case (key, value) => key.toString -> adapt(value) }.toMap
         case array: java.util.Collection[_] => array.asScala.map(adapt)
         case other                          => other
@@ -162,18 +163,22 @@ private[this] object OneOfFaker extends NumberFaker {
   }
 }
 
-/** A RECORD schema generates field data according to the schema of its fields.
-  *
-  * @param schema
-  *   a schema of type RECORD
-  */
-case class RecordGenerator(schema: Schema) extends AvroFaker[GenericRecord] {
-  private val fn: Map[Field, AvroFaker[?]] =
-    schema.getFields.asScala.map((f: Field) => f -> AvroFaker(f.schema())).toMap
-  def apply(ctx: FakerContext): GenericRecord = {
+/** A faker that generates field data according to the schema of its fields. */
+private[this] case class RecordFaker(schema: Schema, fns: Seq[(Field, AvroFaker[_])]) extends AvroFaker[IndexedRecord] {
+  def apply(ctx: FakerContext): IndexedRecord = {
     val rb = new GenericRecordBuilder(schema)
-    fn.map { case (f, fgen) => rb.set(f, fgen.apply(ctx)) }
+    fns.map { case (f, fgen) => rb.set(f, fgen.apply(ctx)) }
     rb.build()
+  }
+}
+
+private[this] object RecordFaker {
+  def apply(args: Map[String, Any]): RecordFaker = {
+    val schema = args(ArgInternalSchema).asInstanceOf[Schema]
+    RecordFaker(
+      schema = schema,
+      fns = schema.getFields.asScala.map((f: Field) => f -> AvroFaker(f.schema(), args ++ getArgs(f))).toSeq
+    )
   }
 }
 
