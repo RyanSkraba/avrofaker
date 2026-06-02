@@ -11,6 +11,11 @@ import scala.collection.immutable.ListMap
 import scala.math.Numeric._
 import scala.util.Random
 
+/** The context used to set up the generator.  This is used internally. */
+private case class SetupContext(schema: Schema, parentArgs: Map[String, Any]) {
+  lazy val args: Map[String, Any] = parentArgs ++ getArgs(schema)
+}
+
 /** The context used to generate a new data. */
 case class FakerContext(rnd: Random = new Random())
 
@@ -58,9 +63,6 @@ object AvroFaker {
   val ArgLength: String = "length"
   val ArgKey: String = "key"
 
-  // The original schema is carried along in the map.
-  val ArgInternalSchema: String = "__internal_schema"
-
   // This is the list of arguments that, if present, imply that the given strategy should be used
   val NumberArgToImplicitStrategy = ListMap(
     ArgMean -> StrategyGauss,
@@ -85,20 +87,20 @@ object AvroFaker {
     ArgLength -> StrategyRandom
   )
 
-  def apply(schema: Schema, args: Map[String, Any]): AvroFaker[_] = {
-    schema.getType match {
-      case Schema.Type.RECORD => RecordFaker(args ++ getArgs(schema))
+  def apply(setup: SetupContext): AvroFaker[_] = {
+    setup.schema.getType match {
+      case Schema.Type.RECORD => RecordFaker(setup)
       case Schema.Type.ENUM =>
-        val fns = schema.getEnumSymbols.asScala.toSeq.map(ConstantFaker[String])
-        val indexFn = OneOfFaker.fake[Int]((0, fns.size), args ++ getArgs(schema), ArgIndex)
+        val fns = setup.schema.getEnumSymbols.asScala.toSeq.map(ConstantFaker[String])
+        val indexFn = OneOfFaker.fake[Int]((0, fns.size), setup.args, ArgIndex)
         OneOfFaker(indexFn, fns)
-      case Schema.Type.ARRAY => ArrayFaker(args ++ getArgs(schema))
-      case Schema.Type.MAP   => MapFaker(args ++ getArgs(schema))
+      case Schema.Type.ARRAY => ArrayFaker(setup)
+      case Schema.Type.MAP   => MapFaker(setup)
       case Schema.Type.UNION =>
-        val fns = schema.getTypes.asScala.toSeq.map(apply).map(_.asInstanceOf[AvroFaker[Any]])
+        val fns = setup.schema.getTypes.asScala.toSeq.map(apply).map(_.asInstanceOf[AvroFaker[Any]])
         val indexFn = OneOfFaker.fake[Int](
           (0, fns.size),
-          args ++ schema.getTypes.asScala.headOption
+          setup.args ++ setup.schema.getTypes.asScala.headOption
             .map(getArgs)
             .flatMap(_.get("union"))
             .collect { case m: Map[_, _] => m }
@@ -107,19 +109,19 @@ object AvroFaker {
           ArgIndex
         )
         OneOfFaker[Any](indexFn, fns)
-      case Schema.Type.FIXED   => BytesFaker(length = schema.getFixedSize)
-      case Schema.Type.STRING  => StringFaker.fake(args ++ getArgs(schema), ArgFaker)
-      case Schema.Type.BYTES   => BytesFaker(args ++ getArgs(schema))
-      case Schema.Type.INT     => IntFaker(args ++ getArgs(schema))
-      case Schema.Type.LONG    => LongFaker(args ++ getArgs(schema))
-      case Schema.Type.FLOAT   => FloatFaker(args ++ getArgs(schema))
-      case Schema.Type.DOUBLE  => DoubleFaker(args ++ getArgs(schema))
-      case Schema.Type.BOOLEAN => BooleanFaker(args ++ getArgs(schema))
+      case Schema.Type.FIXED   => BytesFaker(length = setup.schema.getFixedSize)
+      case Schema.Type.STRING  => StringFaker.fake(setup.args, ArgFaker)
+      case Schema.Type.BYTES   => BytesFaker(setup.args)
+      case Schema.Type.INT     => IntFaker(setup.args)
+      case Schema.Type.LONG    => LongFaker(setup.args)
+      case Schema.Type.FLOAT   => FloatFaker(setup.args)
+      case Schema.Type.DOUBLE  => DoubleFaker(setup.args)
+      case Schema.Type.BOOLEAN => BooleanFaker(setup.args)
       case Schema.Type.NULL    => NullFaker
     }
   }
 
-  def apply(schema: Schema): AvroFaker[_] = apply(schema, Map.empty)
+  def apply(schema: Schema): AvroFaker[_] = apply(SetupContext(schema, Map.empty))
 
   def getArgs(in: Any): Map[String, Any] = {
     def adapt(in: Any): Any = {
@@ -131,7 +133,7 @@ object AvroFaker {
         case other                          => other
       }
     }
-    adapt(in).asInstanceOf[Map[String, Any]] ++ Map(ArgInternalSchema -> in)
+    adapt(in).asInstanceOf[Map[String, Any]]
   }
 }
 
@@ -173,11 +175,12 @@ private[this] case class RecordFaker(schema: Schema, fns: Seq[(Field, AvroFaker[
 }
 
 private[this] object RecordFaker {
-  def apply(args: Map[String, Any]): RecordFaker = {
-    val schema = args(ArgInternalSchema).asInstanceOf[Schema]
+  def apply(setup: SetupContext): RecordFaker = {
     RecordFaker(
-      schema = schema,
-      fns = schema.getFields.asScala.map((f: Field) => f -> AvroFaker(f.schema(), args ++ getArgs(f))).toSeq
+      schema = setup.schema,
+      fns = setup.schema.getFields.asScala
+        .map((f: Field) => f -> AvroFaker(SetupContext(f.schema(), setup.args ++ getArgs(f))))
+        .toSeq
     )
   }
 }
@@ -188,14 +191,14 @@ private[this] case class ArrayFaker(lengthFn: AvroFaker[Long], fn: AvroFaker[_])
 }
 
 private[this] object ArrayFaker extends NumberFaker {
-  def apply(args: Map[String, Any]): ArrayFaker = {
+  def apply(setup: SetupContext): ArrayFaker = {
     ArrayFaker(
-      lengthFn = fake[Long]((-1, Int.MaxValue), args, ArgLength) match {
+      lengthFn = fake[Long]((-1, Int.MaxValue), setup.args, ArgLength) match {
         // Here, we replace the undesirable MaxValue random generator with a smaller constant.
         case RandomFaker(ConstantFaker(-1L), ConstantFaker(Int.MaxValue)) => RandomFaker(3L, 6L)
         case other                                                        => other
       },
-      fn = AvroFaker(args(ArgInternalSchema).asInstanceOf[Schema].getElementType, args)
+      fn = AvroFaker(SetupContext(setup.schema.getElementType, setup.args))
     )
   }
 }
@@ -207,15 +210,15 @@ private[this] case class MapFaker(lengthFn: AvroFaker[Long], keyFn: AvroFaker[St
 }
 
 private[this] object MapFaker extends NumberFaker {
-  def apply(args: Map[String, Any]): MapFaker = {
+  def apply(setup: SetupContext): MapFaker = {
     MapFaker(
-      lengthFn = fake[Long]((-1, Int.MaxValue), args, ArgLength) match {
+      lengthFn = fake[Long]((-1, Int.MaxValue), setup.args, ArgLength) match {
         // Here, we replace the undesirable MaxValue random generator with a smaller constant.
         case RandomFaker(ConstantFaker(-1L), ConstantFaker(Int.MaxValue)) => RandomFaker(3L, 6L)
         case other                                                        => other
       },
-      keyFn = StringFaker.fake(args, ArgKey),
-      fn = AvroFaker(args(ArgInternalSchema).asInstanceOf[Schema].getValueType, args)
+      keyFn = StringFaker.fake(setup.args, ArgKey),
+      fn = AvroFaker(SetupContext(setup.schema.getValueType, setup.args))
     )
   }
 }
