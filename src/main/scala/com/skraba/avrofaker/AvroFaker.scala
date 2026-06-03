@@ -12,8 +12,22 @@ import scala.math.Numeric._
 import scala.util.Random
 
 /** The context used to set up the generator.  This is used internally. */
-private case class SetupContext(schema: Schema, parentArgs: Map[String, Any]) {
-  lazy val args: Map[String, Any] = parentArgs ++ getArgs(schema)
+private case class SetupContext(schema: Schema, parentArgs: Map[String, Any], asJava: Boolean = false) {
+  lazy val args: Map[String, Any] = parentArgs ++ argsOf(schema)
+
+  def argsOf(in: Any): Map[String, Any] = {
+    def adapt(in: Any): Any = {
+      in match {
+        case schema: Schema           => adapt(schema.getObjectProps)
+        case field: Schema.Field      => adapt(field.getObjectProps)
+        case map: java.util.Map[_, _] => map.asScala.map { case (key, value) => key.toString -> adapt(value) }.toMap
+        case array: java.util.Collection[_] => array.asScala.map(adapt)
+        case other                          => other
+      }
+    }
+    adapt(in).asInstanceOf[Map[String, Any]]
+  }
+
 }
 
 /** The context used to generate a new data. */
@@ -97,21 +111,20 @@ object AvroFaker {
       case Schema.Type.ARRAY => ArrayFaker(setup)
       case Schema.Type.MAP   => MapFaker(setup)
       case Schema.Type.UNION =>
-        val fns = setup.schema.getTypes.asScala.toSeq.map(apply).map(_.asInstanceOf[AvroFaker[Any]])
+        val fns = setup.schema.getTypes.asScala.toSeq
+          .map(schema => apply(SetupContext(schema, setup.args)))
+          .map(_.asInstanceOf[AvroFaker[Any]])
         val indexFn = OneOfFaker.fake[Int](
           (0, fns.size),
           setup.args ++ setup.schema.getTypes.asScala.headOption
-            .map(getArgs)
-            .flatMap(_.get("union"))
-            .collect { case m: Map[_, _] => m }
-            .map(_.asInstanceOf[Map[String, Any]])
+            .flatMap(schema => Option(setup.argsOf(schema.getObjectProps.get("union"))))
             .getOrElse(Map.empty[String, Any]),
           ArgIndex
         )
         OneOfFaker[Any](indexFn, fns)
       case Schema.Type.FIXED   => BytesFaker(length = setup.schema.getFixedSize)
       case Schema.Type.STRING  => StringFaker.fake(setup.args, ArgFaker)
-      case Schema.Type.BYTES   => BytesFaker(setup.args)
+      case Schema.Type.BYTES   => BytesFaker(setup)
       case Schema.Type.INT     => IntFaker(setup.args)
       case Schema.Type.LONG    => LongFaker(setup.args)
       case Schema.Type.FLOAT   => FloatFaker(setup.args)
@@ -122,19 +135,6 @@ object AvroFaker {
   }
 
   def apply(schema: Schema): AvroFaker[_] = apply(SetupContext(schema, Map.empty))
-
-  def getArgs(in: Any): Map[String, Any] = {
-    def adapt(in: Any): Any = {
-      in match {
-        case schema: Schema           => adapt(schema.getObjectProps)
-        case field: Schema.Field      => adapt(field.getObjectProps)
-        case map: java.util.Map[_, _] => map.asScala.map { case (key, value) => key.toString -> adapt(value) }.toMap
-        case array: java.util.Collection[_] => array.asScala.map(adapt)
-        case other                          => other
-      }
-    }
-    adapt(in).asInstanceOf[Map[String, Any]]
-  }
 }
 
 /** Each AvroFaker creates a type of datum, depending on the schema. */
@@ -179,7 +179,7 @@ private[this] object RecordFaker {
     RecordFaker(
       schema = setup.schema,
       fns = setup.schema.getFields.asScala
-        .map((f: Field) => f -> AvroFaker(SetupContext(f.schema(), setup.args ++ getArgs(f))))
+        .map((f: Field) => f -> AvroFaker(SetupContext(f.schema(), setup.args ++ setup.argsOf(f))))
         .toSeq
     )
   }
@@ -324,8 +324,8 @@ private[this] case class BytesFaker(lengthFn: AvroFaker[Long]) extends AvroFaker
 }
 
 private[this] object BytesFaker extends NumberFaker {
-  def apply(args: Map[String, Any]): BytesFaker = {
-    BytesFaker(lengthFn = fake[Long]((-1, Int.MaxValue), args, ArgLength) match {
+  def apply(setup: SetupContext): BytesFaker = {
+    BytesFaker(lengthFn = fake[Long]((-1, Int.MaxValue), setup.args, ArgLength) match {
       // Here, we replace the undesirable MaxValue random generator with a smaller constant.
       case RandomFaker(ConstantFaker(-1L), ConstantFaker(Int.MaxValue)) => RandomFaker(16L, 33L)
       case other                                                        => other
