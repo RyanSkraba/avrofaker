@@ -4,15 +4,18 @@ import com.skraba.avrofaker.AvroFaker._
 import net.datafaker.Faker
 import org.apache.avro.Schema
 import org.apache.avro.Schema.Field
+import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed}
 import org.apache.avro.generic.{GenericRecordBuilder, IndexedRecord}
+import org.apache.avro.util.Utf8
 
+import java.nio.ByteBuffer
 import scala.jdk.CollectionConverters._
 import scala.collection.immutable.ListMap
 import scala.math.Numeric._
 import scala.util.Random
 
 /** The context used to set up the generator.  This is used internally. */
-private case class SetupContext(schema: Schema, parentArgs: Map[String, Any], asJava: Boolean = false) {
+private case class SetupContext(schema: Schema, parentArgs: Map[String, Any], asJava: Boolean) {
   lazy val args: Map[String, Any] = parentArgs ++ argsOf(schema)
 
   def argsOf(in: Any): Map[String, Any] = {
@@ -27,7 +30,6 @@ private case class SetupContext(schema: Schema, parentArgs: Map[String, Any], as
     }
     adapt(in).asInstanceOf[Map[String, Any]]
   }
-
 }
 
 /** The context used to generate a new data. */
@@ -105,14 +107,20 @@ object AvroFaker {
     setup.schema.getType match {
       case Schema.Type.RECORD => RecordFaker(setup)
       case Schema.Type.ENUM =>
-        val fns = setup.schema.getEnumSymbols.asScala.toSeq.map(ConstantFaker[String])
-        val indexFn = OneOfFaker.fake[Int]((0, fns.size), setup.args, ArgIndex)
-        OneOfFaker(indexFn, fns)
+        val faker = {
+          val fns = setup.schema.getEnumSymbols.asScala.toSeq.map(ConstantFaker[String])
+          val indexFn = OneOfFaker.fake[Int]((0, fns.size), setup.args, ArgIndex)
+          OneOfFaker(indexFn, fns)
+        }
+        if (setup.asJava) new AvroFaker[EnumSymbol] {
+          override def apply(ctx: FakerContext): EnumSymbol = new EnumSymbol(setup.schema, faker(ctx))
+        }
+        else faker
       case Schema.Type.ARRAY => ArrayFaker(setup)
       case Schema.Type.MAP   => MapFaker(setup)
       case Schema.Type.UNION =>
         val fns = setup.schema.getTypes.asScala.toSeq
-          .map(schema => apply(SetupContext(schema, setup.args)))
+          .map(schema => apply(setup.copy(schema = schema)))
           .map(_.asInstanceOf[AvroFaker[Any]])
         val indexFn = OneOfFaker.fake[Int](
           (0, fns.size),
@@ -122,8 +130,8 @@ object AvroFaker {
           ArgIndex
         )
         OneOfFaker[Any](indexFn, fns)
-      case Schema.Type.FIXED   => BytesFaker(length = setup.schema.getFixedSize)
-      case Schema.Type.STRING  => StringFaker.fake(setup.args, ArgFaker)
+      case Schema.Type.FIXED   => BytesFaker(setup)
+      case Schema.Type.STRING  => StringFaker(setup, ArgFaker)
       case Schema.Type.BYTES   => BytesFaker(setup)
       case Schema.Type.INT     => IntFaker(setup.args)
       case Schema.Type.LONG    => LongFaker(setup.args)
@@ -134,7 +142,7 @@ object AvroFaker {
     }
   }
 
-  def apply(schema: Schema): AvroFaker[_] = apply(SetupContext(schema, Map.empty))
+  def apply(schema: Schema): AvroFaker[_] = apply(SetupContext(schema, Map.empty, asJava = true))
 }
 
 /** Each AvroFaker creates a type of datum, depending on the schema. */
@@ -179,7 +187,7 @@ private[this] object RecordFaker {
     RecordFaker(
       schema = setup.schema,
       fns = setup.schema.getFields.asScala
-        .map((f: Field) => f -> AvroFaker(SetupContext(f.schema(), setup.args ++ setup.argsOf(f))))
+        .map((f: Field) => f -> AvroFaker(setup.copy(schema = f.schema(), parentArgs = setup.args ++ setup.argsOf(f))))
         .toSeq
     )
   }
@@ -191,35 +199,43 @@ private[this] case class ArrayFaker(lengthFn: AvroFaker[Long], fn: AvroFaker[_])
 }
 
 private[this] object ArrayFaker extends NumberFaker {
-  def apply(setup: SetupContext): ArrayFaker = {
-    ArrayFaker(
-      lengthFn = fake[Long]((-1, Int.MaxValue), setup.args, ArgLength) match {
+  def apply(setup: SetupContext): AvroFaker[_] = {
+    val faker = ArrayFaker(
+      lengthFn = fake[Long]((-2, Int.MaxValue), setup.args, ArgLength) match {
         // Here, we replace the undesirable MaxValue random generator with a smaller constant.
-        case RandomFaker(ConstantFaker(-1L), ConstantFaker(Int.MaxValue)) => RandomFaker(3L, 6L)
+        case RandomFaker(ConstantFaker(-2L), ConstantFaker(Int.MaxValue)) => RandomFaker(3L, 6L)
         case other                                                        => other
       },
-      fn = AvroFaker(SetupContext(setup.schema.getElementType, setup.args))
+      fn = AvroFaker(setup.copy(schema = setup.schema.getElementType, parentArgs = setup.args))
     )
+    if (setup.asJava) new AvroFaker[java.util.List[Any]] {
+      override def apply(ctx: FakerContext): java.util.List[Any] = faker(ctx).asJava
+    }
+    else faker
   }
 }
 
 /** A faker that generates an array delegating to its item type. */
-private[this] case class MapFaker(lengthFn: AvroFaker[Long], keyFn: AvroFaker[String], fn: AvroFaker[_])
-    extends AvroFaker[Map[String, Any]] {
-  def apply(ctx: FakerContext): Map[String, Any] = Array.fill(lengthFn(ctx).toInt)(keyFn(ctx) -> fn.apply(ctx)).toMap
+private[this] case class MapFaker(lengthFn: AvroFaker[Long], keyFn: AvroFaker[_], fn: AvroFaker[_])
+    extends AvroFaker[Map[Any, Any]] {
+  def apply(ctx: FakerContext): Map[Any, Any] = Array.fill(lengthFn(ctx).toInt)(keyFn(ctx) -> fn.apply(ctx)).toMap
 }
 
 private[this] object MapFaker extends NumberFaker {
-  def apply(setup: SetupContext): MapFaker = {
-    MapFaker(
+  def apply(setup: SetupContext): AvroFaker[_] = {
+    val faker = MapFaker(
       lengthFn = fake[Long]((-1, Int.MaxValue), setup.args, ArgLength) match {
         // Here, we replace the undesirable MaxValue random generator with a smaller constant.
         case RandomFaker(ConstantFaker(-1L), ConstantFaker(Int.MaxValue)) => RandomFaker(3L, 6L)
         case other                                                        => other
       },
-      keyFn = StringFaker.fake(setup.args, ArgKey),
-      fn = AvroFaker(SetupContext(setup.schema.getValueType, setup.args))
+      keyFn = StringFaker(setup, ArgKey),
+      fn = AvroFaker(setup.copy(schema = setup.schema.getValueType, parentArgs = setup.args))
     )
+    if (setup.asJava) new AvroFaker[java.util.Map[Any, Any]] {
+      override def apply(ctx: FakerContext): java.util.Map[Any, Any] = faker(ctx).asJava
+    }
+    else faker
   }
 }
 
@@ -316,6 +332,14 @@ private[this] object StringFaker {
         throw new IllegalArgumentException(s"Unknown argument content: $unknown")
     }
   }
+
+  def apply(setup: SetupContext, key: String): AvroFaker[_] = {
+    val faker = fake(setup.args, key)
+    if (setup.asJava) new AvroFaker[Utf8] {
+      override def apply(ctx: FakerContext): Utf8 = new Utf8(faker(ctx))
+    }
+    else faker
+  }
 }
 
 /** A faker that generates byte arrays. */
@@ -324,17 +348,28 @@ private[this] case class BytesFaker(lengthFn: AvroFaker[Long]) extends AvroFaker
 }
 
 private[this] object BytesFaker extends NumberFaker {
-  def apply(setup: SetupContext): BytesFaker = {
-    BytesFaker(lengthFn = fake[Long]((-1, Int.MaxValue), setup.args, ArgLength) match {
-      // Here, we replace the undesirable MaxValue random generator with a smaller constant.
-      case RandomFaker(ConstantFaker(-1L), ConstantFaker(Int.MaxValue)) => RandomFaker(16L, 33L)
-      case other                                                        => other
-    })
-  }
-  def apply(length: Int): BytesFaker = {
-    BytesFaker(lengthFn = ConstantFaker(length))
+  def apply(setup: SetupContext): AvroFaker[_] = {
+    setup.schema.getType match {
+      case Schema.Type.FIXED =>
+        val faker = BytesFaker(lengthFn = ConstantFaker(setup.schema.getFixedSize))
+        if (setup.asJava) new AvroFaker[Fixed] {
+          override def apply(ctx: FakerContext): Fixed = new Fixed(setup.schema, faker(ctx).toArray)
+        }
+        else faker
+      case _ =>
+        val faker = BytesFaker(lengthFn = fake[Long]((-1, Int.MaxValue), setup.args, ArgLength) match {
+          // Here, we replace the undesirable MaxValue random generator with a smaller constant.
+          case RandomFaker(ConstantFaker(-1L), ConstantFaker(Int.MaxValue)) => RandomFaker(16L, 33L)
+          case other                                                        => other
+        })
+        if (setup.asJava) new AvroFaker[ByteBuffer]() {
+          override def apply(ctx: FakerContext): ByteBuffer = ByteBuffer.wrap(faker(ctx).toArray)
+        }
+        else faker
+    }
   }
 }
+
 trait NumberFaker {
 
   /** Tests a numeric value and ensures that it is between the bounds (inclusive). */

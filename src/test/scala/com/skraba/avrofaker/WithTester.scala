@@ -1,13 +1,15 @@
 package com.skraba.avrofaker
 
 import org.apache.avro.Schema
-import org.apache.avro.generic.IndexedRecord
+import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericDatumWriter, IndexedRecord}
+import org.apache.avro.io.{DecoderFactory, EncoderFactory}
 import org.scalatest.funspec.AnyFunSpecLike
 import org.scalatest.Assertion
 import org.scalatest.matchers.should.Matchers
 
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import scala.reflect.ClassTag
-import scala.util.{Random, Try}
+import scala.util.{Random, Try, Using}
 
 trait WithTester extends AnyFunSpecLike with Matchers {
 
@@ -41,18 +43,23 @@ trait WithTester extends AnyFunSpecLike with Matchers {
       case _                           => schema
     }
 
-    /** @param schema
-      *   A schema to modify with the given properties
-      * @param props
-      *   Pairs of property keys and values to apply to the schema
-      * @return
-      *   The instance of the schema passed in, with the properties applied
-      */
-    def applyProps(schema: Schema, props: (String, Any)*): Schema = {
-      for ((key, value) <- props)
-        schema.addProp(key, value)
-      schema
-    }
+    /** Use the given GenericData model to serialize the datum according to the schema. */
+    def toBytes(model: GenericData, schema: Schema, datum: T): Array[Byte] =
+      Using(new ByteArrayOutputStream())(baos => {
+        val encoder = EncoderFactory.get.binaryEncoder(baos, null)
+        val w = new GenericDatumWriter[T](schema, model)
+        w.write(datum, encoder)
+        encoder.flush()
+        baos.toByteArray
+      }).get
+
+    /** Use the given GenericData to deserialize a datum from the bytes according to the schema. */
+    def fromBytes(model: GenericData, writer: Schema, reader: Schema, serialized: Array[Byte]): T =
+      Using(new ByteArrayInputStream(serialized))(bais => {
+        val decoder = DecoderFactory.get.binaryDecoder(bais, null)
+        val r = new GenericDatumReader[T](writer, reader, model)
+        r.read(null.asInstanceOf[T], decoder)
+      }).get
 
     /** Create an AvroFaker from the given schema with the given properties.
       *
@@ -63,9 +70,9 @@ trait WithTester extends AnyFunSpecLike with Matchers {
       * @return
       *   A LazyList stream of fake values.
       */
-    def generate(schema: Schema, props: (String, Any)*): LazyList[T] = {
+    def generate(schema: Schema): LazyList[T] = {
       val ctx = FakerContext(new Random(0))
-      val gen = AvroFaker(applyProps(schema, props: _*))
+      val gen = AvroFaker(SetupContext(schema, Map.empty, asJava = false))
       LazyList.continually(gen(ctx)).map {
         case null => null.asInstanceOf[T]
         case x =>
@@ -74,20 +81,28 @@ trait WithTester extends AnyFunSpecLike with Matchers {
       }
     }
 
-    def generate(schema: String, props: (String, Any)*): LazyList[T] =
-      generate(new Schema.Parser().parse(schema), props: _*)
-
-    def generate(props: (String, Any)*): LazyList[T] = generate(Schema.create(sType), props: _*)
-
-    case class ItTestExpected(description: String, schema: String, fn: Any => Any) {
+    case class ItTestExpected(description: String, schema: String, roundTrip: Int = 1000, fn: Any => Any) {
 
       /** Produces the test to be executed (an `it` word). */
       def execute(expected: Seq[_]): Unit = {
         // Generate the values and ensure they are the correct type at the generator
-        val values = generate(schema).take(expected.size)
+        val avroSchema = new Schema.Parser().parse(schema)
+        val values = generate(avroSchema).take(expected.size)
 
         it(s"$description: $schema") {
           values.map(fn) shouldBe expected.map(fn)
+        }
+
+        if (roundTrip > 0) {
+          val javaCtx = FakerContext(new Random(0))
+          val javaGen = AvroFaker(SetupContext(avroSchema, Map.empty, asJava = true))
+          it(s"$description: $schema (roundtrip)") {
+            LazyList.continually(javaGen(javaCtx)).take(roundTrip).foreach { datum =>
+              val bytes = toBytes(GenericData.get, avroSchema, datum.asInstanceOf[T])
+              val copy: T = fromBytes(GenericData.get, avroSchema, avroSchema, bytes)
+              datum shouldBe copy
+            }
+          }
         }
       }
     }
@@ -97,7 +112,7 @@ trait WithTester extends AnyFunSpecLike with Matchers {
       /** Produces the test to be executed (an `it` word). */
       def execute(description: String, schema: String, fn: Any => Any): Unit = {
         // Generate the values and ensure they are the correct type at the generator
-        val values = generate(schema).take(xs.map(_._2).sum.toInt)
+        val values = generate(new Schema.Parser().parse(schema)).take(xs.map(_._2).sum.toInt)
 
         it(s"$description: $schema") {
           val actualDistribution = values.map(fn).groupBy(identity).view.mapValues(_.size).toMap
@@ -152,7 +167,7 @@ trait WithTester extends AnyFunSpecLike with Matchers {
       /** Produces the test to be executed (an `it` word). */
       def execute(expected: Seq[_]): Unit = {
         // Generate the values and ensure they are the correct type at the generator
-        val values = generate(schema).take(expected.size)
+        val values = generate(new Schema.Parser().parse(schema)).take(expected.size)
 
         it(s"$description: $schema") {
           withClue(values.mkString("Found: Seq(", ",", ")")) {
