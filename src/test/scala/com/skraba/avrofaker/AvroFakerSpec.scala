@@ -247,7 +247,8 @@ class AvroFakerSpec extends WithTester {
           )
         )
       else if (it.sType == Schema.Type.DOUBLE)
-        it("should go to infinity at the default max value")(
+        it("should go to infinity at the default max value", roundTrip = 6)(
+          // We have to disable the roundtrip for numbers that are NaN because NaN never equals NaN
           s"""{"step": ${Double.MaxValue * 0.01}, "start": ${Double.MaxValue * 0.95}}""" -> Seq(
             1.7078084781191998e308,
             1.725785409467823e308,

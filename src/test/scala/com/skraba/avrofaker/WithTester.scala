@@ -81,23 +81,29 @@ trait WithTester extends AnyFunSpecLike with Matchers {
       }
     }
 
-    case class ItTestExpected(description: String, schema: String, roundTrip: Int = 1000, fn: Any => Any) {
+    class SchemaTestCase(description: String, schema: String, fn: Any => Any, roundTrip: Int) {
+
+      val avroSchema: Schema = new Schema.Parser().parse(schema)
 
       /** Produces the test to be executed (an `it` word). */
       def execute(expected: Seq[_]): Unit = {
         // Generate the values and ensure they are the correct type at the generator
-        val avroSchema = new Schema.Parser().parse(schema)
         val values = generate(avroSchema).take(expected.size)
 
         it(s"$description: $schema") {
           values.map(fn) shouldBe expected.map(fn)
         }
 
+        // Potentially add a round trip test case
+        roundTrip()
+      }
+
+      def roundTrip(): Unit = {
         if (roundTrip > 0) {
-          val javaCtx = FakerContext(new Random(0))
-          val javaGen = AvroFaker(SetupContext(avroSchema, Map.empty, asJava = true))
+          val ctx = FakerContext(new Random(0))
+          val gen = AvroFaker(SetupContext(avroSchema, Map.empty, asJava = true))
           it(s"$description: $schema (roundtrip)") {
-            LazyList.continually(javaGen(javaCtx)).take(roundTrip).foreach { datum =>
+            LazyList.continually(gen(ctx)).take(roundTrip).foreach { datum =>
               val bytes = toBytes(GenericData.get, avroSchema, datum.asInstanceOf[T])
               val copy: T = fromBytes(GenericData.get, avroSchema, avroSchema, bytes)
               datum shouldBe copy
@@ -123,20 +129,20 @@ trait WithTester extends AnyFunSpecLike with Matchers {
       }
     }
 
-    class Applies(description: String, fn: Any => Any = valueCompareFn) {
+    class Applies(description: String, fn: Any => Any = valueCompareFn, roundTrip: Int) {
       def apply(schema: String, dist: Dist): Unit =
         dist.execute(description, adaptSchemaWithType(schema), fn = fn)
 
       def apply(schema: String, expected: Seq[_]): Unit =
-        ItTestExpected(description, adaptSchemaWithType(schema), fn = fn).execute(expected)
+        new SchemaTestCase(description, adaptSchemaWithType(schema), fn = fn, roundTrip = roundTrip).execute(expected)
 
       def apply(cases: (String, Seq[_])*): Unit = {
         for ((schema, expected) <- cases) apply(schema, expected)
       }
     }
 
-    def apply(description: String): Applies = {
-      new Applies(description)
+    def apply(description: String, roundTrip: Int = 1000): Applies = {
+      new Applies(description, roundTrip = roundTrip)
     }
   }
 
@@ -162,12 +168,13 @@ trait WithTester extends AnyFunSpecLike with Matchers {
       case _              => false
     }
 
-    private[this] case class FractionalIt(description: String, schema: String) {
+    private[this] class FractionalSchemaTestCase(description: String, schema: String, roundTrip: Int)
+        extends SchemaTestCase(description, schema, identity, roundTrip = roundTrip) {
 
       /** Produces the test to be executed (an `it` word). */
-      def execute(expected: Seq[_]): Unit = {
+      override def execute(expected: Seq[_]): Unit = {
         // Generate the values and ensure they are the correct type at the generator
-        val values = generate(new Schema.Parser().parse(schema)).take(expected.size)
+        val values = generate(avroSchema).take(expected.size)
 
         it(s"$description: $schema") {
           withClue(values.mkString("Found: Seq(", ",", ")")) {
@@ -180,6 +187,8 @@ trait WithTester extends AnyFunSpecLike with Matchers {
             }
           }
         }
+
+        roundTrip()
       }
 
       private[this] def compare(f1: Float, f2: Float): Assertion = f1 shouldBe (f2 +- 1e-7f)
@@ -187,17 +196,18 @@ trait WithTester extends AnyFunSpecLike with Matchers {
       private[this] def compare(d1: Double, d2: Double): Assertion = d1 shouldBe (d2 +- 1e-14d)
     }
 
-    class NumericApplies(description: String) extends Applies(description, fn = valueCompareFn) {
+    class NumericApplies(description: String, roundTrip: Int)
+        extends Applies(description, fn = valueCompareFn, roundTrip) {
       override def apply(schema: String, expected: Seq[_]): Unit = {
         if (isIntegral)
           super.apply(adaptSchemaWithType(schema), expected)
         else
-          FractionalIt(description, adaptSchemaWithType(schema)).execute(expected)
+          new FractionalSchemaTestCase(description, adaptSchemaWithType(schema), roundTrip).execute(expected)
       }
     }
 
-    override def apply(description: String): NumericApplies = {
-      new NumericApplies(description)
+    override def apply(description: String, roundTrip: Int = 1000): NumericApplies = {
+      new NumericApplies(description, roundTrip)
     }
   }
 
