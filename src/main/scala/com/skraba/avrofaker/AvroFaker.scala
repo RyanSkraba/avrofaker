@@ -14,8 +14,19 @@ import scala.collection.immutable.ListMap
 import scala.math.Numeric._
 import scala.util.Random
 
-/** The context used to set up the generator.  This is used internally. */
-private case class SetupContext(schema: Schema, parentArgs: Map[String, Any], asJava: Boolean) {
+/** A context used to set up the generator. This is used internally.
+  * @param schema
+  *   The schema that we're currently generating data for.
+  * @param parentArgs
+  *   Arguments and strategies inherited from the parents.
+  * @param asJava
+  *   True if we should generate Java data (the default), false for Scala data. This mainly affects the collection type
+  *   MAP and ARRAY, but also has an impact on ENUM, FIXED, BYTES. Notably, STRING data in Java will be the Avro Utf8
+  *   type. The scala versions are useful for testing and using in Scala code.
+  * @param rnd
+  *   A random number generator that can set with a rpredefined key for reproducibility.
+  */
+private case class SetupContext(schema: Schema, parentArgs: Map[String, Any], asJava: Boolean, rnd: Random) {
   lazy val args: Map[String, Any] = parentArgs ++ argsOf(schema)
 
   def argsOf(in: Any): Map[String, Any] = {
@@ -32,7 +43,10 @@ private case class SetupContext(schema: Schema, parentArgs: Map[String, Any], as
   }
 }
 
-/** The context used to generate a new data. */
+/** The context used to generate a new data.
+  * @param rnd
+  *   A random number generator that can set with a rpredefined key for reproducibility.
+  */
 case class FakerContext(rnd: Random = new Random())
 
 /** AvroFaker creates generic Avro data from an annotated Avro schema.
@@ -142,7 +156,7 @@ object AvroFaker {
     }
   }
 
-  def apply(schema: Schema): AvroFaker[_] = apply(SetupContext(schema, Map.empty, asJava = true))
+  def apply(schema: Schema): AvroFaker[_] = apply(SetupContext(schema, Map.empty, asJava = true, new Random()))
 }
 
 /** Each AvroFaker creates a type of datum, depending on the schema. */

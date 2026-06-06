@@ -72,7 +72,7 @@ trait WithTester extends AnyFunSpecLike with Matchers {
       */
     def generate(schema: Schema): LazyList[T] = {
       val ctx = FakerContext(new Random(0))
-      val gen = AvroFaker(SetupContext(schema, Map.empty, asJava = false))
+      val gen = AvroFaker(SetupContext(schema, Map.empty, asJava = false, new Random(0)))
       LazyList.continually(gen(ctx)).map {
         case null => null.asInstanceOf[T]
         case x =>
@@ -80,6 +80,12 @@ trait WithTester extends AnyFunSpecLike with Matchers {
           x.asInstanceOf[T]
       }
     }
+
+    /** Generate a different seed for each round trip. */
+    val RoundTripSeed: Long = new Random().nextLong()
+
+    /** The number of generated values to test in a round trip. */
+    val DefaultRoundTrips: Int = 1000
 
     class SchemaTestCase(description: String, schema: String, fn: Any => Any, roundTrip: Int) {
 
@@ -100,9 +106,9 @@ trait WithTester extends AnyFunSpecLike with Matchers {
 
       def roundTrip(): Unit = {
         if (roundTrip > 0) {
-          val ctx = FakerContext(new Random(0))
-          val gen = AvroFaker(SetupContext(avroSchema, Map.empty, asJava = true))
-          it(s"$description: $schema (roundtrip)") {
+          val ctx = FakerContext(new Random(RoundTripSeed))
+          val gen = AvroFaker(SetupContext(avroSchema, Map.empty, asJava = true, new Random(RoundTripSeed)))
+          it(s"$description: $schema (round-trip #${RoundTripSeed})") {
             LazyList.continually(gen(ctx)).take(roundTrip).foreach { datum =>
               val bytes = toBytes(GenericData.get, avroSchema, datum.asInstanceOf[T])
               val copy: T = fromBytes(GenericData.get, avroSchema, avroSchema, bytes)
@@ -141,7 +147,7 @@ trait WithTester extends AnyFunSpecLike with Matchers {
       }
     }
 
-    def apply(description: String, roundTrip: Int = 1000): Applies = {
+    def apply(description: String, roundTrip: Int = DefaultRoundTrips): Applies = {
       new Applies(description, roundTrip = roundTrip)
     }
   }
@@ -206,7 +212,7 @@ trait WithTester extends AnyFunSpecLike with Matchers {
       }
     }
 
-    override def apply(description: String, roundTrip: Int = 1000): NumericApplies = {
+    override def apply(description: String, roundTrip: Int = DefaultRoundTrips): NumericApplies = {
       new NumericApplies(description, roundTrip)
     }
   }
