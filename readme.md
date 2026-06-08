@@ -149,33 +149,6 @@ A zero `step`, of course, starts and stays at `min` forever.
 | `{"type": "int", "faker": {"start": 10, "max": 13}}`         | `10`, `11`, `12`, `0`, `1`, `2`, etc.                                                                           |
 | `{"type": "int", "max": 13, "faker": {"start": 10}}`         | :arrow_up: Equivalent, inheriting the `max` argument from the parent.                                           |
 
-### The **weights** strategy with `INT`
-
-:warning: **DRAFT** :warning: **DRAFT** :warning: **DRAFT** :warning: This spec hasn't been implemented yet, the logic is still being worked out.
-
-The **weights** strategy generates `INT` values non-uniformly starting at 0 up to `max`.
-The probability of a value being generated can be weighted by a value.
-
-This strategy has the following arguments (bolded arguments auto-select the strategy if no other has been explicitly selected):
-
-- `max` to specify the upper bounds (exclusive) of the generated value (default: 2147483647 for `INT`).
-- **`weights`** An array containing multipliers that affects how often a value is chosen relative to the others. 
-  Putting a `2` in an array otherwise containing only `1` causes the index of the `2` to be chosen twice as frequently as the others.
-  (default: `[]` for a uniform distribution).
-
-| Schema                                                                  | Summary                                                                                                                 |
-|-------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------|
-| `{"type": "int", "faker": "weights"}`                                   | Generates non-negative integers, uniformly.                                                                             |
-| `{"type": "int", "faker": "weights", "weights": []}`                    | :arrow_up: Equivalent, no weights are assigned.                                                                         |
-| `{"type": "int", "faker": "weights", "weights": [1]}`                   | :arrow_up: Equivalent. Zero is given a weight of `1`, which is the same as numbers not in the array.                    |
-| `{"type": "int", "weights": [1, 1]}`                                    | :arrow_up: Still equivalent, zero and 1 are given a weight of `1`, like all the other numbers.                          |
-| `{"type": "int", "max": 10, "weights": [0, 0, 1, 1, 0, 1, 0, 1, 0, 0]}` | Only choose prime numbers between 0 and 10.                                                                             |
-| `{"type": "int", "max": 10, "weights": [1, 2]}`                         | Twice the chance of picking `1` out of the single digit numbers.                                                        |
-| `{"type": "int", "max": 10, "weights": [1, 1, 1, 9]}`                   | 50% chance of picking `3` out of the single digit numbers.                                                              |
-| `{"type": "int", "max": 10, "weights": [7, 3.5, 3.5]}`                  | One third chance of picking `0`, a third picking `1` or `2` and one third picking the rest of the single digit numbers. |
-
-TODO: Use with **oneof** to show how to weight picking a strategy or value.
-
 ### The **value** strategy with `INT`
 
 You can generate a constant value with the **value** strategy by setting the `faker` attribute to `value`, or by setting the `faker` attribute to a JSON number.
@@ -238,6 +211,32 @@ They each have an argument that is the same as their strategy name, but applies 
 | `{"type": "int", "minof": [1,2,3,4,5]}`                   | Always generates `1`.                                      |
 | `{"type": "int", "maxof": [1,2,3,4,5]}`                   | Always generates `5`.                                      |
 | `{"type": "int", "meanof": [1,2,3,4,5]}`                  | Always generates `3`.                                      |
+
+### The **weights** strategy with `INT`
+
+The **weights** strategy generates `INT` values non-uniformly starting at 0 up to `max`.
+This is normally used for small integer values, where certain values appear more frequently than others (i.e. a higher weight increases its likelihood of being chosen.)
+It can be combined with an `index` argument (with the **oneof** strategy, for example) to make non-uniform choices while generating fake values.
+
+This strategy has the following arguments (bolded arguments auto-select the strategy if no other has been explicitly selected):
+
+- `max` to specify the upper bounds (exclusive) of the generated value (default: 2147483647 for `INT`).
+- **`weights`** An array containing multipliers that affects how often a value (the index of the weight in the array) is chosen relative to the others.
+  Putting a `2` in an array otherwise containing only `1` causes the index of the `2` to be chosen twice as frequently as the others.
+  (default: `[]` for a uniform distribution).
+
+| Schema                                                                                | Summary                                                                                                                 |
+|---------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------|
+| `{"type": "int", "faker": "weights"}`                                                 | Generates non-negative integers, uniformly.                                                                             |
+| `{"type": "int", "faker": "weights", "weights": []}`                                  | :arrow_up: Equivalent, no weights are assigned.                                                                         |
+| `{"type": "int", "faker": "weights", "weights": [1]}`                                 | :arrow_up: Equivalent. Zero is given a weight of `1`, which is the same as numbers not in the array.                    |
+| `{"type": "int", "weights": [1, 1]}`                                                  | :arrow_up: Still equivalent, zero and 1 are given a weight of `1`, like all the other numbers.                          |
+| `{"type": "int", "weights": [2, 1], "max": 2}`                                        | Twice the chance of picking `0` rather than `1`.                                                                        |
+| `{"type": "int", "max": 10, "weights": [0, 0, 1, 1, 0, 1, 0, 1, 0, 0]}`               | Only choose prime numbers between 0 and 10.                                                                             |
+| `{"type": "int", "max": 10, "weights": [1, 2]}`                                       | Twice the chance of picking `1` out of the single digit numbers.                                                        |
+| `{"type": "int", "max": 10, "weights": [1, 1, 1, 9]}`                                 | 50% chance of picking `3` out of the single digit numbers.                                                              |
+| `{"type": "int", "max": 10, "weights": [7, 3.5, 3.5]}`                                | One third chance of picking `0`, a third picking `1` or `2` and one third picking the rest of the single digit numbers. |
+| `{"type": "int", "faker": [999, {"min": 0, "max": 9}], "index": {"weights": [7, 3]}}` | Picks `999` 70% of the time, and a single digit number the other 30%.                                                   |
 
 Generating `LONG`, `FLOAT` and `DOUBLE` data
 ------------------------------------------------------------------------------

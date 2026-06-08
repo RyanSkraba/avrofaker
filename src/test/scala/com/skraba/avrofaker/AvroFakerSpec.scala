@@ -374,6 +374,44 @@ class AvroFakerSpec extends WithTester {
   aggregateStrategies(Tester.Float)
   aggregateStrategies(Tester.Double)
 
+  def weightsStrategy[T](it: NumericTester[T]): Unit = {
+    describe(s"Generate ${it.sType} with the weights strategies") {
+
+      it("should generate small numbers with the expected frequency")(
+        """{"weights": [5,1], "max": 2}""" -> new it.Dist(4993, 1007),
+        """{"weights": [5], "max": 2}""" -> new it.Dist(4993, 1007),
+        """{"weights": [2.5,0.5], "max": 2}""" -> new it.Dist(4993, 1007),
+        """{"weights": [5,1,1,1,1], "max": 2}""" -> new it.Dist(4993, 1007),
+        """{"weights": [5,1,1000,1000,1000], "max": 2}""" -> new it.Dist(4993, 1007),
+        """{"weights": [1,5], "max": 2}""" -> new it.Dist(1038, 4962),
+        """{"weights": [1,5], "max": 3}""" -> new it.Dist(1038, 5002, 960),
+        """{"weights": [1,5], "max": 5}""" -> new it.Dist(1002, 4942, 1018, 1056, 982),
+        // The random selection is not guaranteed to be the same if the weights array is explicit
+        // or implicitly
+        """{"weights": [1,5,1,1,1], "max": 5}""" -> new it.Dist(1055, 4923, 1021, 1024, 977),
+        """{"weights": [1,5,1,1], "max": 5}""" -> new it.Dist(1000, 4941, 1022, 997, 1040),
+        """{"weights": [1,5,1], "max": 5}""" -> new it.Dist(980, 5030, 993, 974, 1023)
+      )
+
+      it("should get the correct distribution among 5 numbers with 5 weights")(
+        """{"weights": [5,4,3,2,1], "max": 5}""" -> new it.Dist(5005, 3991, 2975, 1995, 1034)
+      )
+
+      it("should get the correct distribution among 5 numbers with 4 weights")(
+        """{"weights": [5,4,3,2], "max": 5}""" -> new it.Dist(4994, 3950, 3053, 1989, 1014)
+      )
+
+      it("should get the correct distribution among 8 numbers with 4 weights")(
+        """{"weights": [5,4,3,2], "max": 8}""" ->
+          new it.Dist(4636, 3879, 2819, 1885, 921, 932, 912, 1016)
+      )
+    }
+  }
+  weightsStrategy(Tester.Int)
+  weightsStrategy(Tester.Long)
+  weightsStrategy(Tester.Float)
+  weightsStrategy(Tester.Double)
+
   describe("Generating Avro RECORD data") {
     Tester.Record("should create an simple record")(
       """{  "type": "record",

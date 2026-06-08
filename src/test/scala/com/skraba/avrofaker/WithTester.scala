@@ -87,12 +87,39 @@ trait WithTester extends AnyFunSpecLike with Matchers {
     /** The number of generated values to test in a round trip. */
     val DefaultRoundTrips: Int = 1000
 
-    class SchemaTestCase(description: String, schema: String, fn: Any => Any, roundTrip: Int) {
-
+    trait TesterCase {
+      val description: String
+      val schema: String
       val avroSchema: Schema = new Schema.Parser().parse(schema)
 
+      def execute(): Unit
+
+      def roundTrip(count: Int): Unit = {
+        if (count > 0) {
+          val ctx = FakerContext(new Random(RoundTripSeed))
+          val gen = AvroFaker(SetupContext(avroSchema, Map.empty, asJava = true, new Random(RoundTripSeed)))
+          it(s"$description: $schema (round-trip #${RoundTripSeed})") {
+            LazyList.continually(gen(ctx)).take(count).foreach { datum =>
+              val bytes = toBytes(GenericData.get, avroSchema, datum.asInstanceOf[T])
+              val copy: T = fromBytes(GenericData.get, avroSchema, avroSchema, bytes)
+              datum shouldBe copy
+            }
+          }
+        }
+      }
+
+    }
+
+    class ReturnedValuesTesterCase(
+        override val description: String,
+        override val schema: String,
+        fn: Any => Any,
+        expected: Seq[_],
+        roundTrip: Int
+    ) extends TesterCase {
+
       /** Produces the test to be executed (an `it` word). */
-      def execute(expected: Seq[_]): Unit = {
+      def execute(): Unit = {
         // Generate the values and ensure they are the correct type at the generator
         val values = generate(avroSchema).take(expected.size)
 
@@ -101,48 +128,46 @@ trait WithTester extends AnyFunSpecLike with Matchers {
         }
 
         // Potentially add a round trip test case
-        roundTrip()
-      }
-
-      def roundTrip(): Unit = {
-        if (roundTrip > 0) {
-          val ctx = FakerContext(new Random(RoundTripSeed))
-          val gen = AvroFaker(SetupContext(avroSchema, Map.empty, asJava = true, new Random(RoundTripSeed)))
-          it(s"$description: $schema (round-trip #${RoundTripSeed})") {
-            LazyList.continually(gen(ctx)).take(roundTrip).foreach { datum =>
-              val bytes = toBytes(GenericData.get, avroSchema, datum.asInstanceOf[T])
-              val copy: T = fromBytes(GenericData.get, avroSchema, avroSchema, bytes)
-              datum shouldBe copy
-            }
-          }
-        }
+        roundTrip(roundTrip)
       }
     }
 
-    class Dist(val xs: (_, Long)*) {
+    class Dist(val xs: (_, Int)*) {
+      def this(ds0: Int, ds: Int*) = this((ds0 +: ds).zipWithIndex.map(_.swap): _*)
+    }
+
+    class DistributionTesterCase(description: String, schema: String, fn: Any => Any, expected: Dist)
+        extends ReturnedValuesTesterCase(description, schema, fn, Seq.empty, -1) {
 
       /** Produces the test to be executed (an `it` word). */
-      def execute(description: String, schema: String, fn: Any => Any): Unit = {
+      override def execute(): Unit = {
         // Generate the values and ensure they are the correct type at the generator
-        val values = generate(new Schema.Parser().parse(schema)).take(xs.map(_._2).sum.toInt)
+        val values = generate(avroSchema).take(expected.xs.map(_._2).sum)
 
         it(s"$description: $schema") {
           val actualDistribution = values.map(fn).groupBy(identity).view.mapValues(_.size).toMap
           withClue(actualDistribution.mkString("Found: Map(", ",", ")")) {
-            actualDistribution shouldBe xs.collect { case (k, v) => fn(k) -> v }.toMap
+            actualDistribution shouldBe expected.xs.collect { case (k, v) => fn(k) -> v }.toMap
           }
         }
       }
     }
 
     class Applies(description: String, fn: Any => Any = valueCompareFn, roundTrip: Int) {
-      def apply(schema: String, dist: Dist): Unit =
-        dist.execute(description, adaptSchemaWithType(schema), fn = fn)
 
       def apply(schema: String, expected: Seq[_]): Unit =
-        new SchemaTestCase(description, adaptSchemaWithType(schema), fn = fn, roundTrip = roundTrip).execute(expected)
+        new ReturnedValuesTesterCase(description, adaptSchemaWithType(schema), fn = fn, expected, roundTrip = roundTrip)
+          .execute()
 
       def apply(cases: (String, Seq[_])*): Unit = {
+        for ((schema, expected) <- cases) apply(schema, expected)
+      }
+
+      def apply(schema: String, expected: Dist): Unit =
+        new DistributionTesterCase(description, adaptSchemaWithType(schema), fn = fn, expected).execute()
+
+      def apply(case0: (String, Dist), cases: (String, Dist)*): Unit = {
+        apply(case0._1, case0._2)
         for ((schema, expected) <- cases) apply(schema, expected)
       }
     }
@@ -174,11 +199,11 @@ trait WithTester extends AnyFunSpecLike with Matchers {
       case _              => false
     }
 
-    private[this] class FractionalSchemaTestCase(description: String, schema: String, roundTrip: Int)
-        extends SchemaTestCase(description, schema, identity, roundTrip = roundTrip) {
+    private[this] class ValueByValueFpTesterCase(description: String, schema: String, expected: Seq[_], roundTrip: Int)
+        extends ReturnedValuesTesterCase(description, schema, identity, expected, roundTrip = roundTrip) {
 
       /** Produces the test to be executed (an `it` word). */
-      override def execute(expected: Seq[_]): Unit = {
+      override def execute(): Unit = {
         // Generate the values and ensure they are the correct type at the generator
         val values = generate(avroSchema).take(expected.size)
 
@@ -194,7 +219,7 @@ trait WithTester extends AnyFunSpecLike with Matchers {
           }
         }
 
-        roundTrip()
+        roundTrip(roundTrip)
       }
 
       private[this] def compare(f1: Float, f2: Float): Assertion = f1 shouldBe (f2 +- 1e-7f)
@@ -208,7 +233,7 @@ trait WithTester extends AnyFunSpecLike with Matchers {
         if (isIntegral)
           super.apply(adaptSchemaWithType(schema), expected)
         else
-          new FractionalSchemaTestCase(description, adaptSchemaWithType(schema), roundTrip).execute(expected)
+          new ValueByValueFpTesterCase(description, adaptSchemaWithType(schema), expected, roundTrip).execute()
       }
     }
 
