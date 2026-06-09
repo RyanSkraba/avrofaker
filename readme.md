@@ -225,18 +225,18 @@ This strategy has the following arguments (bolded arguments auto-select the stra
   Putting a `2` in an array otherwise containing only `1` causes the index of the `2` to be chosen twice as frequently as the others.
   (default: `[]` for a uniform distribution).
 
-| Schema                                                                                | Summary                                                                                                                 |
-|---------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------|
-| `{"type": "int", "faker": "weights"}`                                                 | Generates non-negative integers, uniformly.                                                                             |
-| `{"type": "int", "faker": "weights", "weights": []}`                                  | :arrow_up: Equivalent, no weights are assigned.                                                                         |
-| `{"type": "int", "faker": "weights", "weights": [1]}`                                 | :arrow_up: Equivalent. Zero is given a weight of `1`, which is the same as numbers not in the array.                    |
-| `{"type": "int", "weights": [1, 1]}`                                                  | :arrow_up: Still equivalent, zero and 1 are given a weight of `1`, like all the other numbers.                          |
-| `{"type": "int", "weights": [2, 1], "max": 2}`                                        | Twice the chance of picking `0` rather than `1`.                                                                        |
-| `{"type": "int", "max": 10, "weights": [0, 0, 1, 1, 0, 1, 0, 1, 0, 0]}`               | Only choose prime numbers between 0 and 10.                                                                             |
-| `{"type": "int", "max": 10, "weights": [1, 2]}`                                       | Twice the chance of picking `1` out of the single digit numbers.                                                        |
-| `{"type": "int", "max": 10, "weights": [1, 1, 1, 9]}`                                 | 50% chance of picking `3` out of the single digit numbers.                                                              |
-| `{"type": "int", "max": 10, "weights": [7, 3.5, 3.5]}`                                | One third chance of picking `0`, a third picking `1` or `2` and one third picking the rest of the single digit numbers. |
-| `{"type": "int", "faker": [999, {"min": 0, "max": 9}], "index": {"weights": [7, 3]}}` | Picks `999` 70% of the time, and a single digit number the other 30%.                                                   |
+| Schema                                                                                 | Summary                                                                                                                 |
+|----------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------|
+| `{"type": "int", "faker": "weights"}`                                                  | Generates non-negative integers, uniformly.                                                                             |
+| `{"type": "int", "faker": "weights", "weights": []}`                                   | :arrow_up: Equivalent, no weights are assigned.                                                                         |
+| `{"type": "int", "faker": "weights", "weights": [1]}`                                  | :arrow_up: Equivalent. Zero is given a weight of `1`, which is the same as numbers not in the array.                    |
+| `{"type": "int", "weights": [1, 1]}`                                                   | :arrow_up: Still equivalent, zero and 1 are given a weight of `1`, like all the other numbers.                          |
+| `{"type": "int", "weights": [2, 1], "max": 2}`                                         | Twice the chance of picking `0` rather than `1`.                                                                        |
+| `{"type": "int", "max": 10, "weights": [0, 0, 1, 1, 0, 1, 0, 1, 0, 0]}`                | Only choose prime numbers between 0 and 10.                                                                             |
+| `{"type": "int", "max": 10, "weights": [1, 2]}`                                        | Twice the chance of picking `1` out of the single digit numbers.                                                        |
+| `{"type": "int", "max": 10, "weights": [1, 1, 1, 9]}`                                  | 50% chance of picking `3` out of the single digit numbers.                                                              |
+| `{"type": "int", "max": 10, "weights": [7, 3.5, 3.5]}`                                 | One third chance of picking `0`, a third picking `1` or `2` and one third picking the rest of the single digit numbers. |
+| `{"type": "int", "faker": [999, {"min": 0, "max": 10}], "index": {"weights": [7, 3]}}` | Picks `999` 70% of the time, and a single digit number the other 30%.                                                   |
 
 Generating `LONG`, `FLOAT` and `DOUBLE` data
 ------------------------------------------------------------------------------
@@ -248,6 +248,7 @@ Notes:
   Likewise, the default `mean` and `stddev` are `0.0` and `1.0`. 
 - The default `min` and `max` for a floating point **sequence** are their minimum and maximum values.
 - Where values are truncated for whole numbers, they are retained with as much precision as possible for floating point values.
+- The **weights** always generates whole numbers with a maximum at most `2147483647` even when applied to non-integer types.
 
 Generating `STRING` data
 ------------------------------------------------------------------------------
@@ -260,7 +261,7 @@ This strategy has the following argument:
 
 - `length` to specify the lower bounds (inclusive) of the generated value (default: `10`).
 - `min` to specify the lower bounds (inclusive) of the generated value (default: `0`, constrainted to non-negative).
-- `max` to specify the lower bounds (inclusive) of the generated value (default: **TODO - should have a max?**).
+- `max` to specify the upper bounds (exclusive) of the generated value (default: **TODO - should have a max?**).
 
 | Schema                                                           | Summary                                                                                           |
 |------------------------------------------------------------------|---------------------------------------------------------------------------------------------------|

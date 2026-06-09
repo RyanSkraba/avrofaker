@@ -455,8 +455,7 @@ trait NumberFaker {
       case StrategyGauss    => DoubleGaussFaker(bounds, args)
       case StrategySequence => SequenceFaker[T](bounds, args)
       case StrategyValue    => BoundedFaker(bounds, args)
-      case StrategyOneOf | StrategySumOf | StrategyProductOf | StrategyMinOf | StrategyMaxOf | StrategyMeanOf |
-          StrategyWeights =>
+      case StrategyOneOf | StrategySumOf | StrategyProductOf | StrategyMinOf | StrategyMaxOf | StrategyMeanOf =>
         fake(bounds, args, args(key).toString, dflt)(num) match {
           case RandomOneOfFaker(fns) =>
             args(key) match {
@@ -466,10 +465,10 @@ trait NumberFaker {
               case StrategyMinOf     => MinOfFaker(fns)(num)
               case StrategyMaxOf     => MaxOfFaker(fns)(num)
               case StrategyMeanOf    => MeanOfFaker(fns)(num)
-              case StrategyWeights   => WeightsFaker(bounds, args)
             }
           case other => other
         }
+      case StrategyWeights => WeightsFaker(bounds, args)
     }
     if (explicitFn.nonEmpty) return explicitFn.get
 
@@ -706,18 +705,17 @@ private[this] object SequenceFaker extends NumberFaker {
   }
 }
 
-private[this] case class WeightsFaker[T](max: Int, weights: Seq[Double])(implicit num: Numeric[T])
+private[this] case class WeightsConstantFaker[T](max: Int, weights: Seq[Double])(implicit num: Numeric[T])
     extends AvroFaker[T]
     with NumberFaker {
+
+  // Count the number of elements that are weighted (n) and unweighted (m) and the sum of their weights
+  private[this] val n = (weights.size - weights.reverse.takeWhile(_ == 1.0).size) min max
+  private[this] val nSum = weights.take(n).sum
+  private[this] val m = (max - n) max 0
+  private[this] val mSum = m // 1.0 each
+
   def apply(ctx: FakerContext): T = {
-    // We have N elements with weights
-    val n = weights.size min max
-    val nSum = weights.take(n).sum
-
-    // And there are M elements without weights
-    val m = (max - weights.size) max 0
-    val mSum = m // 1.0 each
-
     // We choose either the N set or the M set with the correct probability
     val index: Int = if (mSum == 0 || nSum != 0 && ctx.rnd.nextDouble() < nSum / (nSum + mSum)) {
       // If there's only one number in the weighted set, then return it without consuming a random
@@ -737,19 +735,26 @@ private[this] case class WeightsFaker[T](max: Int, weights: Seq[Double])(implici
   }
 }
 
+private[this] case class WeightFaker[T](maxFn: AvroFaker[Int], weightFns: Seq[AvroFaker[Double]])(implicit
+    num: Numeric[T]
+) extends AvroFaker[T]
+    with NumberFaker {
+  def apply(ctx: FakerContext): T = WeightsConstantFaker[T](maxFn(ctx), weightFns.map(_(ctx))).apply(ctx)
+}
+
 private[this] object WeightsFaker extends NumberFaker {
   def apply[T](bounds: (T, T), args: Map[String, Any])(implicit num: Numeric[T]): AvroFaker[T] = {
-    val max = fake[T](bounds, args, ArgMax) match {
-      case ConstantFaker(max) => max
-      case _                  => ??? // TODO
+    import num._
+    val maxFn: AvroFaker[Int] = fake((0, (num.fromInt(Int.MaxValue) min bounds._2).toInt), args, ArgMax)
+    val weightFns: Seq[AvroFaker[Double]] = fake[Double]((0d, Double.MaxValue), args, StrategyWeights, 1) match {
+      case RandomOneOfFaker(fns) => fns
+      case other                 => Seq(other)
     }
-
-    val xxx = args.get(StrategyWeights)
-    val weights: Seq[Double] = args.get(StrategyWeights) match {
-      case Some(xs: Iterable[_]) => xs.map(toNum[Double]).toSeq
-      case _                     => ??? // TODO
+    maxFn match {
+      case ConstantFaker(max) if weightFns.forall(_.isInstanceOf[ConstantFaker[_]]) =>
+        WeightsConstantFaker[T](max = max, weights = weightFns.collect[Double] { case ConstantFaker(weight) => weight })
+      case _ => WeightFaker(maxFn = maxFn, weightFns = weightFns)
     }
-    WeightsFaker(max = num.toInt(max), weights = weights)
   }
 }
 
