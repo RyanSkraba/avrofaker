@@ -146,7 +146,18 @@ trait WithTester extends AnyFunSpecLike with Matchers {
 
         it(s"$description: $schema") {
           val actualDistribution = values.map(fn).groupBy(identity).view.mapValues(_.size).toMap
-          withClue(actualDistribution.mkString("Found: Map(", ",", ")")) {
+
+          val clue = actualDistribution match {
+            case actual if (0 until actual.size).forall(actual.keySet) =>
+              (0 until actual.size).map(actual).mkString("Dist(", ",", ")")
+            case actual =>
+              actual.toSeq
+                .sortBy(any => (any._1.toString.toLongOption.getOrElse(Long.MaxValue), any.toString))
+                .map { case (k, v) => s"$k->$v" }
+                .mkString("Dist(", ",", ")")
+          }
+
+          withClue(clue) {
             actualDistribution shouldBe expected.xs.collect { case (k, v) => fn(k) -> v }.toMap
           }
         }
