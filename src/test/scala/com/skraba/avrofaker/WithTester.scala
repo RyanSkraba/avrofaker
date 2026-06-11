@@ -24,25 +24,6 @@ trait WithTester extends AnyFunSpecLike with Matchers {
     */
   class Tester[T](val sType: Schema.Type, val valueCompareFn: Any => Any)(implicit ct: ClassTag[T]) {
 
-    /** Given the schema under test, injects the Avro type from this helper.
-      *
-      * This will either
-      *   - Replace any occurrences of &lt;TYPE&gt; by the appropriate Avro schema type, or
-      *   - If it looks like a JSON object without a "type": attribute, it will rewrite to add this attribute,
-      *   - Leave it alone.
-      *
-      * @param schema
-      *   A string
-      * @return
-      *   The schema with the helper type inserted.
-      */
-    def adaptSchemaWithType(schema: String): String = schema match {
-      case _ if schema.contains("<TYPE>")                     => schema.replace("<TYPE>", sType.toString.toLowerCase())
-      case _ if schema == s"""{"type": "${sType.getName}"}""" => schema
-      case _ if schema.startsWith("{") => s"""{"type": "${sType.getName}", ${schema.substring(1)}"""
-      case _                           => schema
-    }
-
     /** Use the given GenericData model to serialize the datum according to the schema. */
     def toBytes(model: GenericData, schema: Schema, datum: T): Array[Byte] =
       Using(new ByteArrayOutputStream())(baos => {
@@ -90,9 +71,28 @@ trait WithTester extends AnyFunSpecLike with Matchers {
     trait TesterCase {
       val description: String
       val schema: String
-      val avroSchema: Schema = new Schema.Parser().parse(schema)
+      val avroSchema: Schema = new Schema.Parser().parse(adaptSchemaWithType(schema))
 
       def execute(): Unit
+
+      /** Given the schema under test, injects the Avro type from this helper.
+        *
+        * This will either
+        *   - Replace any occurrences of &lt;TYPE&gt; by the appropriate Avro schema type, or
+        *   - If it looks like a JSON object without a "type": attribute, it will rewrite to add this attribute,
+        *   - Leave it alone.
+        *
+        * @param schema
+        *   A string
+        * @return
+        *   The schema with the helper type inserted.
+        */
+      private[this] def adaptSchemaWithType(schema: String): String = schema match {
+        case _ if schema.contains("<TYPE>") => schema.replace("<TYPE>", sType.toString.toLowerCase())
+        case _ if schema == s"""{"type": "${sType.getName}"}""" => schema
+        case _ if schema.startsWith("{") => s"""{"type": "${sType.getName}", ${schema.substring(1)}"""
+        case _                           => schema
+      }
 
       def roundTrip(count: Int): Unit = {
         if (count > 0) {
@@ -167,7 +167,7 @@ trait WithTester extends AnyFunSpecLike with Matchers {
     class Applies(description: String, fn: Any => Any = valueCompareFn, roundTrip: Int) {
 
       def apply(schema: String, expected: Seq[_]): Unit =
-        new ReturnedValuesTesterCase(description, adaptSchemaWithType(schema), fn = fn, expected, roundTrip = roundTrip)
+        new ReturnedValuesTesterCase(description, schema, fn = fn, expected, roundTrip = roundTrip)
           .execute()
 
       def apply(cases: (String, Seq[_])*): Unit = {
@@ -175,7 +175,7 @@ trait WithTester extends AnyFunSpecLike with Matchers {
       }
 
       def apply(schema: String, expected: Dist): Unit =
-        new DistributionTesterCase(description, adaptSchemaWithType(schema), fn = fn, expected).execute()
+        new DistributionTesterCase(description, schema, fn = fn, expected).execute()
 
       def apply(case0: (String, Dist), cases: (String, Dist)*): Unit = {
         apply(case0._1, case0._2)
@@ -242,9 +242,9 @@ trait WithTester extends AnyFunSpecLike with Matchers {
         extends Applies(description, fn = valueCompareFn, roundTrip) {
       override def apply(schema: String, expected: Seq[_]): Unit = {
         if (isIntegral)
-          super.apply(adaptSchemaWithType(schema), expected)
+          super.apply(schema, expected)
         else
-          new ValueByValueFpTesterCase(description, adaptSchemaWithType(schema), expected, roundTrip).execute()
+          new ValueByValueFpTesterCase(description, schema, expected, roundTrip).execute()
       }
     }
 
