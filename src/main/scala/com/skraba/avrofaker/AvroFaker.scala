@@ -9,6 +9,7 @@ import org.apache.avro.generic.{GenericRecordBuilder, IndexedRecord}
 import org.apache.avro.util.Utf8
 
 import java.nio.ByteBuffer
+import scala.collection.immutable
 import scala.jdk.CollectionConverters._
 import scala.collection.immutable.ListMap
 import scala.math.Numeric._
@@ -125,7 +126,7 @@ object AvroFaker {
       case Schema.Type.ENUM =>
         val faker = {
           val fns = setup.schema.getEnumSymbols.asScala.toSeq.map(ConstantFaker[String])
-          val indexFn = OneOfFaker.fake[Int]((0, fns.size), setup.args, ArgIndex)
+          val indexFn = NumberFaker[Int]((0, fns.size), setup.args, ArgIndex)
           OneOfFaker(indexFn, fns)
         }
         if (setup.asJava) new AvroFaker[EnumSymbol] {
@@ -138,7 +139,7 @@ object AvroFaker {
         val fns = setup.schema.getTypes.asScala.toSeq
           .map(schema => apply(setup.copy(schema = schema)))
           .map(_.asInstanceOf[AvroFaker[Any]])
-        val indexFn = OneOfFaker.fake[Int](
+        val indexFn = NumberFaker[Int](
           (0, fns.size),
           setup.args ++ setup.schema.getTypes.asScala.headOption
             .flatMap(schema => Option(setup.argsOf(schema.getObjectProps.get("union"))))
@@ -177,15 +178,13 @@ private[this] case class RandomOneOfFaker[T](fns: Seq[AvroFaker[T]]) extends Avr
 }
 
 /** A faker that picks a strategy from a list using an index. */
-private[this] case class OneOfFaker[T](indexFn: AvroFaker[Int], fns: Seq[AvroFaker[T]])
-    extends AvroFaker[T]
-    with NumberFaker {
+private[this] case class OneOfFaker[T](indexFn: AvroFaker[Int], fns: Seq[AvroFaker[T]]) extends AvroFaker[T] {
   def apply(ctx: FakerContext): T = fns(indexFn(ctx) max 0 min (fns.size - 1))(ctx)
 }
 
-private[this] object OneOfFaker extends NumberFaker {
+private[this] object OneOfFaker {
   def apply[T](args: Map[String, Any], fns: Seq[AvroFaker[T]]): OneOfFaker[T] = {
-    OneOfFaker(indexFn = fake[Int]((0, fns.size), args, ArgIndex), fns)
+    OneOfFaker(indexFn = NumberFaker[Int]((0, fns.size), args, ArgIndex), fns)
   }
 }
 
@@ -214,10 +213,10 @@ private[this] case class ArrayFaker(lengthFn: AvroFaker[Long], fn: AvroFaker[_])
   def apply(ctx: FakerContext): Seq[Any] = Seq.fill(lengthFn(ctx).toInt)(fn.apply(ctx))
 }
 
-private[this] object ArrayFaker extends NumberFaker {
+private[this] object ArrayFaker {
   def apply(setup: SetupContext): AvroFaker[_] = {
     val faker = ArrayFaker(
-      lengthFn = fake[Long]((-2, Int.MaxValue), setup.args, ArgLength) match {
+      lengthFn = NumberFaker[Long]((-2, Int.MaxValue), setup.args, ArgLength) match {
         // Here, we replace the undesirable MaxValue random generator with a smaller constant.
         case RandomFaker(ConstantFaker(-2L), ConstantFaker(Int.MaxValue)) => RandomFaker(3L, 6L)
         case other                                                        => other
@@ -237,10 +236,10 @@ private[this] case class MapFaker(lengthFn: AvroFaker[Long], keyFn: AvroFaker[_]
   def apply(ctx: FakerContext): Map[Any, Any] = Array.fill(lengthFn(ctx).toInt)(keyFn(ctx) -> fn.apply(ctx)).toMap
 }
 
-private[this] object MapFaker extends NumberFaker {
+private[this] object MapFaker {
   def apply(setup: SetupContext): AvroFaker[_] = {
     val faker = MapFaker(
-      lengthFn = fake[Long]((-1, Int.MaxValue), setup.args, ArgLength) match {
+      lengthFn = NumberFaker[Long]((-1, Int.MaxValue), setup.args, ArgLength) match {
         // Here, we replace the undesirable MaxValue random generator with a smaller constant.
         case RandomFaker(ConstantFaker(-1L), ConstantFaker(Int.MaxValue)) => RandomFaker(3L, 6L)
         case other                                                        => other
@@ -260,9 +259,9 @@ private[this] case class StringRandomFaker(lengthFn: AvroFaker[Long]) extends Av
   def apply(ctx: FakerContext): String = ctx.rnd.alphanumeric.take(lengthFn(ctx).toInt).mkString
 }
 
-private[this] object StringRandomFaker extends NumberFaker {
+private[this] object StringRandomFaker {
   def apply(args: Map[String, Any]): StringRandomFaker = {
-    StringRandomFaker(lengthFn = fake[Long]((-1, Int.MaxValue), args, ArgLength) match {
+    StringRandomFaker(lengthFn = NumberFaker[Long]((-1, Int.MaxValue), args, ArgLength) match {
       // Here, we replace the undesirable MaxValue random generator with a smaller constant.
       case RandomFaker(ConstantFaker(-1L), ConstantFaker(Int.MaxValue)) => ConstantFaker(10L)
       case other                                                        => other
@@ -363,7 +362,7 @@ private[this] case class BytesFaker(lengthFn: AvroFaker[Long]) extends AvroFaker
   def apply(ctx: FakerContext): Seq[Byte] = ctx.rnd.nextBytes(lengthFn(ctx).toInt).toSeq
 }
 
-private[this] object BytesFaker extends NumberFaker {
+private[this] object BytesFaker {
   def apply(setup: SetupContext): AvroFaker[_] = {
     setup.schema.getType match {
       case Schema.Type.FIXED =>
@@ -373,7 +372,7 @@ private[this] object BytesFaker extends NumberFaker {
         }
         else faker
       case _ =>
-        val faker = BytesFaker(lengthFn = fake[Long]((-1, Int.MaxValue), setup.args, ArgLength) match {
+        val faker = BytesFaker(lengthFn = NumberFaker[Long]((-1, Int.MaxValue), setup.args, ArgLength) match {
           // Here, we replace the undesirable MaxValue random generator with a smaller constant.
           case RandomFaker(ConstantFaker(-1L), ConstantFaker(Int.MaxValue)) => RandomFaker(16L, 33L)
           case other                                                        => other
@@ -386,7 +385,7 @@ private[this] object BytesFaker extends NumberFaker {
   }
 }
 
-trait NumberFaker {
+private[this] object NumberFaker {
 
   /** Tests a numeric value and ensures that it is between the bounds (inclusive). */
   def forceBounds[T](value: T, lower: T, upper: T)(implicit num: Numeric[T]): T = {
@@ -438,8 +437,8 @@ trait NumberFaker {
     }
   }
 
-  def fake[T](bounds: (T, T), args: Map[String, Any], key: String, dflt: Any = Map(ArgFaker -> StrategyRandom))(implicit
-      num: Numeric[T]
+  def apply[T](bounds: (T, T), args: Map[String, Any], key: String, dflt: Any = Map(ArgFaker -> StrategyRandom))(
+      implicit num: Numeric[T]
   ): AvroFaker[T] = {
 
     // Get the key from the args or defaults
@@ -450,13 +449,13 @@ trait NumberFaker {
     if (key == ArgMax && value.isEmpty) return ConstantFaker(bounds._2)
 
     // Get any explicitly specified strategy.
-    val explicitFn: Option[AvroFaker[T]] = args.get(key) collect {
+    val explicitFn: Option[AvroFaker[T]] = value collect {
       case StrategyRandom   => RandomFaker(bounds, args)
       case StrategyGauss    => DoubleGaussFaker(bounds, args)
       case StrategySequence => SequenceFaker[T](bounds, args)
       case StrategyValue    => BoundedFaker(bounds, args)
       case StrategyOneOf | StrategySumOf | StrategyProductOf | StrategyMinOf | StrategyMaxOf | StrategyMeanOf =>
-        fake(bounds, args, args(key).toString, dflt)(num) match {
+        NumberFaker(bounds, args, args(key).toString, dflt)(num) match {
           case RandomOneOfFaker(fns) =>
             args(key) match {
               case StrategyOneOf     => OneOfFaker(args, fns)
@@ -481,20 +480,27 @@ trait NumberFaker {
       val implicitFn: Option[Map[String, String]] = NumberArgToImplicitStrategy.keys
         .find(args.contains)
         .map(k => Map(key -> NumberArgToImplicitStrategy.apply(k)))
-      if (implicitFn.nonEmpty) return fake(bounds, args ++ implicitFn.get, key, dflt)(num)
+      if (implicitFn.nonEmpty) return NumberFaker(bounds, args ++ implicitFn.get, key, dflt)(num)
     }
 
     // Otherwise, interpret the strategy depending on its type
     value match {
       case Some(m: Map[_, _]) =>
         // A map, or object, adds attributes to the strategy that can complete how it is interpreted.
-        fake[T](bounds, args.removed(key).removed(ArgFaker) ++ m.asInstanceOf[Map[String, Any]], ArgFaker, dflt)
+        // TODO: This is pretty complicated, removing some attributes from the existing faker strategy in
+        // order to use the attributes in the extra object, when what we *really* want is to prioritize the
+        // attributes in m to implicitly choose the strategy, then try the combined attributes.
+        val keysToRemove: immutable.Iterable[String] = NumberArgToImplicitStrategy
+          .groupMap(_._2)(_._1)
+          .getOrElse(args.getOrElse(ArgFaker, "").toString, Seq.empty)
+          .toSeq :+ ArgFaker :+ key
+        NumberFaker[T](bounds, args.removedAll(keysToRemove) ++ m.asInstanceOf[Map[String, Any]], ArgFaker, dflt)
       case Some(xs: Iterable[_]) =>
         // An array is, by default, a list of strategies that we randomly pick one from.
-        RandomOneOfFaker(xs.map(v => fake[T](bounds, args ++ Map(key -> v), key, dflt)).toSeq)
+        RandomOneOfFaker(xs.map(v => NumberFaker[T](bounds, args ++ Map(key -> v), key, dflt)).toSeq)
       case None =>
         // We fall back to the default value.
-        fake[T](bounds, args ++ Map(key -> dflt), key, 0)
+        NumberFaker[T](bounds, args ++ Map(key -> dflt), key, 0)
       case Some(unknown) =>
         // This should never occur in our processing
         throw new IllegalArgumentException(s"Unknown argument content: $unknown")
@@ -507,8 +513,8 @@ trait NumberFaker {
   * @param args
   *   The annotations that have been assigned to the schema, or to the faker strategy.
   */
-case class IntFaker(args: Map[String, Any]) extends AvroFaker[Int] with NumberFaker {
-  private val fn = fake[Long]((Int.MinValue.toLong, Int.MaxValue.toLong), args, ArgFaker)
+case class IntFaker(args: Map[String, Any]) extends AvroFaker[Int] {
+  private val fn = NumberFaker[Long]((Int.MinValue.toLong, Int.MaxValue.toLong), args, ArgFaker)
   def apply(ctx: FakerContext): Int = fn(ctx).toInt
 }
 
@@ -517,8 +523,8 @@ case class IntFaker(args: Map[String, Any]) extends AvroFaker[Int] with NumberFa
   * @param args
   *   The annotations that have been assigned to the schema, or to the faker strategy.
   */
-case class LongFaker(args: Map[String, Any]) extends AvroFaker[Long] with NumberFaker {
-  private val fn = fake[Long]((Long.MinValue, Long.MaxValue), args, ArgFaker)
+case class LongFaker(args: Map[String, Any]) extends AvroFaker[Long] {
+  private val fn = NumberFaker[Long]((Long.MinValue, Long.MaxValue), args, ArgFaker)
   def apply(ctx: FakerContext): Long = fn(ctx)
 }
 
@@ -527,8 +533,9 @@ case class LongFaker(args: Map[String, Any]) extends AvroFaker[Long] with Number
   * @param args
   *   The annotations that have been assigned to the schema, or to the faker strategy.
   */
-case class FloatFaker(args: Map[String, Any]) extends AvroFaker[Float] with NumberFaker {
-  private val fn = fake[Double]((Float.NegativeInfinity.toDouble, Float.PositiveInfinity.toDouble), args, ArgFaker)
+case class FloatFaker(args: Map[String, Any]) extends AvroFaker[Float] {
+  private val fn =
+    NumberFaker[Double]((Float.NegativeInfinity.toDouble, Float.PositiveInfinity.toDouble), args, ArgFaker)
   def apply(ctx: FakerContext): Float = fn(ctx).toFloat
 }
 
@@ -537,25 +544,24 @@ case class FloatFaker(args: Map[String, Any]) extends AvroFaker[Float] with Numb
   * @param args
   *   The annotations that have been assigned to the schema, or to the faker strategy.
   */
-case class DoubleFaker(args: Map[String, Any]) extends AvroFaker[Double] with NumberFaker {
-  private val fn = fake[Double]((Double.NegativeInfinity, Double.PositiveInfinity), args, ArgFaker)
+case class DoubleFaker(args: Map[String, Any]) extends AvroFaker[Double] {
+  private val fn = NumberFaker[Double]((Double.NegativeInfinity, Double.PositiveInfinity), args, ArgFaker)
   def apply(ctx: FakerContext): Double = fn(ctx)
 }
 
 /** A faker that returns a value bounded by a minimum or a maximum. */
 private[this] case class BoundedFaker[T](minFn: AvroFaker[T], maxFn: AvroFaker[T], fn: AvroFaker[T])(implicit
     num: Numeric[T]
-) extends AvroFaker[T]
-    with NumberFaker {
-  def apply(ctx: FakerContext): T = forceBounds(fn(ctx), minFn(ctx), maxFn(ctx))
+) extends AvroFaker[T] {
+  def apply(ctx: FakerContext): T = NumberFaker.forceBounds(fn(ctx), minFn(ctx), maxFn(ctx))
 }
 
-private[this] object BoundedFaker extends NumberFaker {
+private[this] object BoundedFaker {
   def apply[T](bounds: (T, T), args: Map[String, Any])(implicit num: Numeric[T]): BoundedFaker[T] =
     BoundedFaker(
-      minFn = fake(bounds, args, ArgMin)(num),
-      maxFn = fake(bounds, args, ArgMax)(num),
-      fn = fake(bounds, args, StrategyValue)(num)
+      minFn = NumberFaker(bounds, args, ArgMin)(num),
+      maxFn = NumberFaker(bounds, args, ArgMax)(num),
+      fn = NumberFaker(bounds, args, StrategyValue)(num)
     )
 }
 
@@ -567,9 +573,9 @@ private[this] object BoundedFaker extends NumberFaker {
   *   - `max`: The upper bound (exclusive) of the sequence (No default, this must be supplied).
   */
 private[this] case class RandomFaker[T](minFn: AvroFaker[T], maxFn: AvroFaker[T])(implicit num: Numeric[T])
-    extends AvroFaker[T]
-    with NumberFaker {
+    extends AvroFaker[T] {
   import num._
+  import NumberFaker._
   def apply(ctx: FakerContext): T = num match {
     case _: FloatIsFractional =>
       toNum(ctx.rnd.between(minFn(ctx).toFloat, maxFn(ctx).toFloat))(num)
@@ -583,13 +589,16 @@ private[this] case class RandomFaker[T](minFn: AvroFaker[T], maxFn: AvroFaker[T]
   }
 }
 
-private[this] object RandomFaker extends NumberFaker {
+private[this] object RandomFaker {
   def apply[T](bounds: (T, T), args: Map[String, Any])(implicit num: Numeric[T]): RandomFaker[T] = {
     val defaultBounds: (T, T) = num match {
       case _: Fractional[T] => (num.zero, num.one)
       case _                => bounds
     }
-    RandomFaker(minFn = fake(defaultBounds, args, ArgMin), maxFn = fake(defaultBounds, args, ArgMax))
+    RandomFaker(
+      minFn = NumberFaker(defaultBounds, args, ArgMin),
+      maxFn = NumberFaker(defaultBounds, args, ArgMax)
+    )
   }
   def apply[T](min: T, max: T)(implicit num: Numeric[T]): RandomFaker[T] = {
     RandomFaker(minFn = ConstantFaker[T](min), maxFn = ConstantFaker[T](max))
@@ -614,19 +623,18 @@ private[this] case class DoubleGaussFaker[T](
     meanFn: AvroFaker[Double],
     stddevFn: AvroFaker[Double]
 )(implicit num: Numeric[T])
-    extends AvroFaker[T]
-    with NumberFaker {
+    extends AvroFaker[T] {
   def apply(ctx: FakerContext): T = {
     val min = minFn(ctx)
     val max = maxFn(ctx)
     val mean = meanFn(ctx)
     val stddev = stddevFn(ctx)
     val next = LazyList.continually(ctx.rnd.nextGaussian() * stddev + mean).dropWhile(_ < min).dropWhile(_ >= max).head
-    toNum(next)(num)
+    NumberFaker.toNum(next)(num)
   }
 }
 
-private[this] object DoubleGaussFaker extends NumberFaker {
+private[this] object DoubleGaussFaker {
   def apply[T](bounds: (T, T), args: Map[String, Any])(implicit num: Numeric[T]): DoubleGaussFaker[T] = {
 
     /** Fractional numbers have a standard deviation of 100 instead of 1 so we see a wider range of values. */
@@ -636,10 +644,10 @@ private[this] object DoubleGaussFaker extends NumberFaker {
     }
 
     DoubleGaussFaker[T](
-      minFn = fake[Double]((Double.NegativeInfinity, Double.PositiveInfinity), args, ArgMin, bounds._1),
-      maxFn = fake[Double]((Double.NegativeInfinity, Double.PositiveInfinity), args, ArgMax, bounds._2),
-      meanFn = fake[Double]((Double.NegativeInfinity, Double.PositiveInfinity), args, ArgMean, 0),
-      stddevFn = fake[Double]((Double.NegativeInfinity, Double.PositiveInfinity), args, ArgStddev, defaultStddev)
+      minFn = NumberFaker[Double]((Double.NegativeInfinity, Double.PositiveInfinity), args, ArgMin, bounds._1),
+      maxFn = NumberFaker[Double]((Double.NegativeInfinity, Double.PositiveInfinity), args, ArgMax, bounds._2),
+      meanFn = NumberFaker[Double]((Double.NegativeInfinity, Double.PositiveInfinity), args, ArgMean, 0),
+      stddevFn = NumberFaker[Double]((Double.NegativeInfinity, Double.PositiveInfinity), args, ArgStddev, defaultStddev)
     )
   }
 }
@@ -663,8 +671,7 @@ private[this] case class SequenceFaker[T](
     startFn: Option[AvroFaker[T]],
     overridesMin: Boolean
 )(implicit num: Numeric[T])
-    extends AvroFaker[T]
-    with NumberFaker {
+    extends AvroFaker[T] {
   import num._
   private var next: Option[T] = None
   def apply(ctx: FakerContext): T = {
@@ -693,21 +700,20 @@ private[this] case class SequenceFaker[T](
   }
 }
 
-private[this] object SequenceFaker extends NumberFaker {
+private[this] object SequenceFaker {
   def apply[T](bounds: (T, T), args: Map[String, Any])(implicit num: Numeric[T]): SequenceFaker[T] = {
     SequenceFaker(
-      minFn = fake[T](bounds, args, ArgMin),
-      maxFn = fake[T](bounds, args, ArgMax),
-      stepFn = fake[T](bounds, args, ArgStep, 1),
-      startFn = if (args.contains(ArgStart)) Some(fake[T](bounds, args, ArgStart)(num)) else None,
+      minFn = NumberFaker[T](bounds, args, ArgMin),
+      maxFn = NumberFaker[T](bounds, args, ArgMax),
+      stepFn = NumberFaker[T](bounds, args, ArgStep, 1),
+      startFn = if (args.contains(ArgStart)) Some(NumberFaker[T](bounds, args, ArgStart)(num)) else None,
       overridesMin = args.contains(ArgMin)
     )
   }
 }
 
 private[this] case class WeightsConstantFaker[T](max: Int, weights: Seq[Double])(implicit num: Numeric[T])
-    extends AvroFaker[T]
-    with NumberFaker {
+    extends AvroFaker[T] {
 
   // Count the number of elements that are weighted (n) and unweighted (m) and the sum of their weights
   private[this] val n = (weights.size - weights.reverse.takeWhile(_ == 1.0).size) min max
@@ -731,25 +737,25 @@ private[this] case class WeightsConstantFaker[T](max: Int, weights: Seq[Double])
       else n + ctx.rnd.nextInt(m)
     }
 
-    toNum[T](index)
+    NumberFaker.toNum[T](index)
   }
 }
 
 private[this] case class WeightFaker[T](maxFn: AvroFaker[Int], weightFns: Seq[AvroFaker[Double]])(implicit
     num: Numeric[T]
-) extends AvroFaker[T]
-    with NumberFaker {
+) extends AvroFaker[T] {
   def apply(ctx: FakerContext): T = WeightsConstantFaker[T](maxFn(ctx), weightFns.map(_(ctx))).apply(ctx)
 }
 
-private[this] object WeightsFaker extends NumberFaker {
+private[this] object WeightsFaker {
   def apply[T](bounds: (T, T), args: Map[String, Any])(implicit num: Numeric[T]): AvroFaker[T] = {
     import num._
-    val maxFn: AvroFaker[Int] = fake((0, (num.fromInt(Int.MaxValue) min bounds._2).toInt), args, ArgMax)
-    val weightFns: Seq[AvroFaker[Double]] = fake[Double]((0d, Double.MaxValue), args, StrategyWeights, 1) match {
-      case RandomOneOfFaker(fns) => fns
-      case other                 => Seq(other)
-    }
+    val maxFn: AvroFaker[Int] = NumberFaker((0, (num.fromInt(Int.MaxValue) min bounds._2).toInt), args, ArgMax)
+    val weightFns: Seq[AvroFaker[Double]] =
+      NumberFaker[Double]((0d, Double.MaxValue), args, StrategyWeights, 1) match {
+        case RandomOneOfFaker(fns) => fns
+        case other                 => Seq(other)
+      }
     maxFn match {
       case ConstantFaker(max) if weightFns.forall(_.isInstanceOf[ConstantFaker[_]]) =>
         WeightsConstantFaker[T](max = max, weights = weightFns.collect[Double] { case ConstantFaker(weight) => weight })
@@ -796,8 +802,8 @@ private[this] case class MeanOfFaker[T](fns: Seq[FakerContext => T])(implicit nu
   * @param args
   *   The annotations that have been assigned to the schema, or to the faker strategy.
   */
-case class BooleanFaker(args: Map[String, Any]) extends AvroFaker[Boolean] with NumberFaker {
-  private val fn = fake[Long]((0, 2), args, ArgFaker)
+case class BooleanFaker(args: Map[String, Any]) extends AvroFaker[Boolean] {
+  private val fn = NumberFaker[Long]((0, 2), args, ArgFaker)
   def apply(ctx: FakerContext): Boolean = fn(ctx) != 0
 }
 

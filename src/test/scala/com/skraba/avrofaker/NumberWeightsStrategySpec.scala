@@ -38,15 +38,17 @@ class NumberWeightsStrategySpec extends WithTester {
 
       if (it.isIntegral) {
         it("should weight picking 999 over single digits")(
-          // TODO: Why is 999 not getting picked ?
-          """{"oneof": [999, 1], "index": {"weights": [1000, 1]}}""" -> new it.Dist(1 -> 1000),
-          // TODO: Why is 999 only getting 50%?
-          """{"oneof": [999, {"min": 0, "max": 4}], "index": {"weights": [1000, 1]}}""" -> new it.Dist(
-            0 -> 139,
-            1 -> 127,
-            2 -> 116,
-            3 -> 130,
-            999 -> 488
+          """{"oneof": [999, 1], "index": {"weights": [0,1]}}""" -> new it.Dist(1 -> 1000),
+          """{"oneof": [999, 1], "index": {"weights": [1,1]}}""" -> new it.Dist(1 -> 492, 999 -> 508),
+          """{"oneof": [999, 1], "index": {"weights": [2,1]}}""" -> new it.Dist(1 -> 337, 999 -> 663),
+          """{"oneof": [999, 1], "index": {"weights": [10, 1]}}""" -> new it.Dist(1 -> 90, 999 -> 910),
+          """{"oneof": [999, 1], "index": {"weights": [100, 1]}}""" -> new it.Dist(1 -> 8, 999 -> 992),
+          """{"oneof": [999, {"min": 0, "max": 4}], "index": {"weights": [10, 1]}}""" -> new it.Dist(
+            0 -> 15,
+            1 -> 31,
+            2 -> 18,
+            3 -> 13,
+            999 -> 923
           )
         )
       }
