@@ -131,14 +131,14 @@ object NumberFaker {
     }
   }
 
-  def bounded[T](bounds: (T, T), args: Map[String, Any])(implicit num: Numeric[T]): BoundedFaker[T] =
+  def bounded[T](bounds: (T, T), args: Map[String, Any])(implicit num: Numeric[T]): AvroFaker[T] =
     BoundedFaker(
       minFn = NumberFaker(bounds, args, ArgMin)(num),
       maxFn = NumberFaker(bounds, args, ArgMax)(num),
       fn = NumberFaker(bounds, args, StrategyValue)(num)
     )
 
-  def random[T](bounds: (T, T), args: Map[String, Any])(implicit num: Numeric[T]): RandomFaker[T] = {
+  def random[T](bounds: (T, T), args: Map[String, Any])(implicit num: Numeric[T]): AvroFaker[T] = {
     val defaultBounds: (T, T) = num match {
       case _: Fractional[T] => (num.zero, num.one)
       case _                => bounds
@@ -148,11 +148,11 @@ object NumberFaker {
       maxFn = NumberFaker(defaultBounds, args, ArgMax)
     )
   }
-  def random[T](min: T, max: T)(implicit num: Numeric[T]): RandomFaker[T] = {
+  def random[T](min: T, max: T)(implicit num: Numeric[T]): AvroFaker[T] = {
     RandomFaker(minFn = ConstantFaker[T](min), maxFn = ConstantFaker[T](max))
   }
 
-  def gauss[T](bounds: (T, T), args: Map[String, Any])(implicit num: Numeric[T]): DoubleGaussFaker[T] = {
+  def gauss[T](bounds: (T, T), args: Map[String, Any])(implicit num: Numeric[T]): AvroFaker[T] = {
 
     /** Fractional numbers have a standard deviation of 100 instead of 1 so we see a wider range of values. */
     val defaultStddev: Double = num match {
@@ -168,7 +168,7 @@ object NumberFaker {
     )
   }
 
-  def sequence[T](bounds: (T, T), args: Map[String, Any])(implicit num: Numeric[T]): SequenceFaker[T] = {
+  def sequence[T](bounds: (T, T), args: Map[String, Any])(implicit num: Numeric[T]): AvroFaker[T] = {
     SequenceFaker(
       minFn = NumberFaker[T](bounds, args, ArgMin),
       maxFn = NumberFaker[T](bounds, args, ArgMax),
@@ -193,8 +193,19 @@ object NumberFaker {
     }
   }
 
+  /** Create an AvroFaker to generate long values, but don't default to a random value uniformly distributed along the
+    * entire LONG range. If nothing is otherwise specified, use the dflt strategy provided.
+    */
+  def longOrElse(args: Map[String, Any], key: String, dflt: AvroFaker[Long]): AvroFaker[Long] = {
+    NumberFaker[Long]((Long.MaxValue, Long.MinValue), args, ArgLength) match {
+      // Here, we replace the undesirable MaxValue random generator with smaller constants.
+      case RandomFaker(ConstantFaker(Long.MaxValue), ConstantFaker(Long.MinValue)) => dflt
+      case other                                                                   => other
+    }
+  }
+
   /** A faker that returns a value bounded by a minimum or a maximum. */
-  case class BoundedFaker[T](minFn: AvroFaker[T], maxFn: AvroFaker[T], fn: AvroFaker[T])(implicit
+  private[this] case class BoundedFaker[T](minFn: AvroFaker[T], maxFn: AvroFaker[T], fn: AvroFaker[T])(implicit
       num: Numeric[T]
   ) extends AvroFaker[T] {
     def apply(ctx: FakerContext): T = NumberFaker.forceBounds(fn(ctx), minFn(ctx), maxFn(ctx))
@@ -207,7 +218,8 @@ object NumberFaker {
     *   - `min`: The lower bound (inclusive) of the sequence (Default: 0).
     *   - `max`: The upper bound (exclusive) of the sequence (No default, this must be supplied).
     */
-  case class RandomFaker[T](minFn: AvroFaker[T], maxFn: AvroFaker[T])(implicit num: Numeric[T]) extends AvroFaker[T] {
+  private[this] case class RandomFaker[T](minFn: AvroFaker[T], maxFn: AvroFaker[T])(implicit num: Numeric[T])
+      extends AvroFaker[T] {
     import NumberFaker._
     import num._
     def apply(ctx: FakerContext): T = num match {
@@ -235,7 +247,7 @@ object NumberFaker {
     * Values outside the `min` and `max` are discarded. Be careful, if your valid interval is rarely drawn from a
     * gaussian distribution, this generator might be very slow to generate value.
     */
-  case class DoubleGaussFaker[T](
+  private[this] case class DoubleGaussFaker[T](
       minFn: AvroFaker[Double],
       maxFn: AvroFaker[Double],
       meanFn: AvroFaker[Double],
@@ -265,7 +277,7 @@ object NumberFaker {
     *   - `start`: The starting value for the sequence. (Default: depends on the step, whether it starts from the 0,
     *     upper or lower bound.)
     */
-  case class SequenceFaker[T](
+  private[this] case class SequenceFaker[T](
       minFn: AvroFaker[T],
       maxFn: AvroFaker[T],
       stepFn: AvroFaker[T],
@@ -302,27 +314,28 @@ object NumberFaker {
   }
 
   /** A faker that sums from its list of strategies */
-  case class SumOfFaker[T](fns: Seq[FakerContext => T])(implicit num: Numeric[T]) extends AvroFaker[T] {
+  private[this] case class SumOfFaker[T](fns: Seq[FakerContext => T])(implicit num: Numeric[T]) extends AvroFaker[T] {
     def apply(ctx: FakerContext): T = fns.map(_.apply(ctx)).sum
   }
 
   /** A faker that creates a product from its list of strategies */
-  case class ProductOfFaker[T](fns: Seq[FakerContext => T])(implicit num: Numeric[T]) extends AvroFaker[T] {
+  private[this] case class ProductOfFaker[T](fns: Seq[FakerContext => T])(implicit num: Numeric[T])
+      extends AvroFaker[T] {
     def apply(ctx: FakerContext): T = fns.map(_.apply(ctx)).product
   }
 
   /** A faker that finds the minimum from its list of strategies */
-  case class MinOfFaker[T](fns: Seq[FakerContext => T])(implicit num: Numeric[T]) extends AvroFaker[T] {
+  private[this] case class MinOfFaker[T](fns: Seq[FakerContext => T])(implicit num: Numeric[T]) extends AvroFaker[T] {
     def apply(ctx: FakerContext): T = fns.map(_.apply(ctx)).min
   }
 
   /** A faker that finds the maximum from its list of strategies */
-  case class MaxOfFaker[T](fns: Seq[FakerContext => T])(implicit num: Numeric[T]) extends AvroFaker[T] {
+  private[this] case class MaxOfFaker[T](fns: Seq[FakerContext => T])(implicit num: Numeric[T]) extends AvroFaker[T] {
     def apply(ctx: FakerContext): T = fns.map(_.apply(ctx)).max
   }
 
   /** A faker that finds the mean from its list of strategies */
-  case class MeanOfFaker[T](fns: Seq[FakerContext => T])(implicit num: Numeric[T]) extends AvroFaker[T] {
+  private[this] case class MeanOfFaker[T](fns: Seq[FakerContext => T])(implicit num: Numeric[T]) extends AvroFaker[T] {
     def apply(ctx: FakerContext): T = num match {
       case frac: Fractional[_] =>
         import frac._
@@ -334,7 +347,8 @@ object NumberFaker {
     }
   }
 
-  case class WeightsConstantFaker[T](max: Int, weights: Seq[Double])(implicit num: Numeric[T]) extends AvroFaker[T] {
+  private[this] case class WeightsConstantFaker[T](max: Int, weights: Seq[Double])(implicit num: Numeric[T])
+      extends AvroFaker[T] {
 
     // Count the number of elements that are weighted (n) and unweighted (m) and the sum of their weights
     private[this] val n = (weights.size - weights.reverse.takeWhile(_ == 1.0).size) min max
@@ -362,7 +376,7 @@ object NumberFaker {
     }
   }
 
-  case class WeightFaker[T](maxFn: AvroFaker[Int], weightFns: Seq[AvroFaker[Double]])(implicit
+  private[this] case class WeightFaker[T](maxFn: AvroFaker[Int], weightFns: Seq[AvroFaker[Double]])(implicit
       num: Numeric[T]
   ) extends AvroFaker[T] {
     def apply(ctx: FakerContext): T = WeightsConstantFaker[T](maxFn(ctx), weightFns.map(_(ctx))).apply(ctx)
