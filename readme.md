@@ -17,6 +17,8 @@ for (_ <- 0 to 10) print(s"${faker()} ")
 
 Every schema and subschema can be annotated, so you can create awesome, customizable fake data for testing!
 
+[DataFaker]: https://github.com/datafaker-net/datafaker "DataFaker home page"
+
 Specification
 ==============================================================================
 
@@ -24,10 +26,14 @@ Annotations are added to an Avro schema (also sometimes known as JSON properties
 These are ignored by Avro for serialization and deserialization and schema evolution, but can have any value to help interpret the data.
 In this case, we're not interpreting the data, we're describing how to create it.
 
-In general, the `faker` attribute describes the strategy to use to generate fake data.
-Other arguments can be present alongside thiis attribute to configure it.
+In general, the `faker` attribute describes the **strategy** to use to generate fake data.
+Other arguments can be present alongside this attribute to configure it.
 
-As an example:
+In the example below:
+
+* The `id` (`INT`) field has the annotation `"faker": "sequence"`, so it uses the **sequence** strategy to generate integers starting from zero.
+* The `price`  (`DOUBLE`) field selects the **random** strategy to generate random 64-bit floating point numbers, uniformly over the range given by the argument annotations `"min": 10, "max": 20` (i.e. the interval `[10, 20)`).
+* The `code` (`STRING`) field has the argument annotation `"expression": "#{examplify 'A999'"` which implicitly selects the **expression** strategy using [DataFaker] expressions to create codes like `Y929`.
 
 ```json
 {
@@ -39,35 +45,51 @@ As an example:
     "type" : "int",
     "faker" : "sequence"
   }, {
-    "name" : "weight",
+    "name" : "price",
     "doc" : "Generates a double value in the interval [10, 20)",
     "type" : "double",
     "faker" : "random",
     "min" : 10,
     "max" : 20
+  }, {
+    "name" : "code",
+    "doc" : "Generates a string value in the form Y929",
+    "type" : "string",
+    "expression" : "#{examplify 'A999'}"
   } ]
 }
 ```
 
-Some notes:
+Note:
 
 - If the `faker` strategy is missing for a type, it can be implicitly detected from any of its unique arguments.
   Each type has a list of strategies that are checked in order of priority, and a default strategy to fall back on.
-- If the `faker` annotation contains an object, then *that* object is used to detect the strategy, inheriting but overriding the arguments from the parent.
+  In the example above, the `STRING` field `name` doesn't have a strategy.
+- If the `faker` annotation contains an object, then *that* object is used to detect the strategy, inheriting and overriding the arguments from the parent.
   This is useful for composing strategies.
 
-Generating `INT` data
+Generating numeric data: `INT`, `LONG`, `FLOAT` and `DOUBLE` data
 ------------------------------------------------------------------------------
 
-The strategies for `INT` data and their arguments include (bold attribute can be used to implicitly select the strategy):
+These generation strategies and their arguments apply to all numeric types:
 
 * **random** with `min` and `max` (default)
 * **gauss** with `min`, `max`, **`mean`** and **`stddev`**
 * **sequence** with `min`, `max`, **`start`** and **`step`**
-* **weights** with **`weights`**
 * **value** with **`value`**
-* **oneof** with **`oneof`** and **`index`** 
+* **oneof** with **`oneof`** and **`index`**
 * **sumof**, **productof**, **minof**, **maxof**, **meanof** are all aggregate strategies that have a single attribute of the same name.
+* **weights** with **`weights`**
+
+The arguments in bold can be used to implicitly select the strategy (in this order of priority).
+
+Notes:
+- The strategies are explained for the `INT` type but apply to all the numeric types, using their respective bounds and precision in Java. 
+- The default `min` and `max` for **random** `FLOAT` and `DOUBLE` are `0.0` and `1.0` (not their minimum and maximum values).
+  Likewise, the default `mean` and `stddev` are `0.0` and `1.0`.
+- The default `min` and `max` for a floating point **sequence** are their minimum and maximum values.
+- Where values are truncated for whole numbers, they are retained with as much precision as possible for floating point values.
+- The **weights** always generates non-negative whole numbers with a maximum at most `2147483647` even when applied to floating point types.
 
 ### The **random** strategy with `INT`
 
@@ -238,20 +260,18 @@ This strategy has the following arguments (bolded arguments auto-select the stra
 | `{"type": "int", "max": 10, "weights": [7, 3.5, 3.5]}`                                 | One third chance of picking `0`, a third picking `1` or `2` and one third picking the rest of the single digit numbers. |
 | `{"type": "int", "faker": [999, {"min": 0, "max": 10}], "index": {"weights": [7, 3]}}` | Picks `999` 70% of the time, and a single digit number the other 30%.                                                   |
 
-Generating `LONG`, `FLOAT` and `DOUBLE` data
-------------------------------------------------------------------------------
-
-The same rules and strategies apply to the other numerical types, using their respective bounds and precision in Java.
-
-Notes:
-- The default `min` and `max` for **random** `FLOAT` and `DOUBLE` are `0.0` and `1.0` (not their minimum and maximum values).
-  Likewise, the default `mean` and `stddev` are `0.0` and `1.0`. 
-- The default `min` and `max` for a floating point **sequence** are their minimum and maximum values.
-- Where values are truncated for whole numbers, they are retained with as much precision as possible for floating point values.
-- The **weights** always generates whole numbers with a maximum at most `2147483647` even when applied to non-integer types.
-
 Generating `STRING` data
 ------------------------------------------------------------------------------
+
+These generation strategies and their arguments apply to the `STRING` type:
+
+* **random** with **`length`**, `min` and `max` to specify the number of characters in the string (default)
+* **value** with **`value`** to specifies the string to return.
+* **oneof** with **`oneof`** and **`index`** selects a strategy to generate the string. 
+* **sumof** with **`sumof`** performs string concatenation.
+* **expression** with **`expression`** to generate data using the [DataFaker] library.
+
+The arguments in bold can be used to implicitly select the strategy (in this order of priority).
 
 ### The **random** strategy with `STRING`
 
@@ -302,7 +322,7 @@ These two strategies both apply to `STRING` data as in `INT` data
 
 ### The **expression** strategy with `STRING`
 
-The AvroFaker library wraps [DataFaker](https://github.com/datafaker-net/datafaker) and uses it to generate strings with the **expression** strategy.
+The AvroFaker library wraps [DataFaker] and uses it to generate strings with the **expression** strategy.
 
 This strategy has the following argument (which auto-selects the strategy if no other strategy has been explicitly selected):
 

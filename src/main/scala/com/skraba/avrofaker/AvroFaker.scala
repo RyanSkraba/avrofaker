@@ -132,9 +132,7 @@ object AvroFaker {
           val indexFn = NumberFaker[Int]((0, fns.size), setup.args, ArgIndex)
           OneOfFaker(indexFn, fns)
         }
-        if (setup.asJava) new AvroFaker[EnumSymbol] {
-          override def apply(ctx: FakerContext): EnumSymbol = new EnumSymbol(setup.schema, faker(ctx))
-        }
+        if (setup.asJava) (ctx: FakerContext) => new EnumSymbol(setup.schema, faker(ctx))
         else faker
       case Schema.Type.ARRAY => ArrayFaker(setup)
       case Schema.Type.MAP   => MapFaker(setup)
@@ -235,9 +233,7 @@ private[this] object MapFaker {
       keyFn = StringFaker(setup, ArgKey),
       fn = AvroFaker(setup.copy(schema = setup.schema.getValueType, parentArgs = setup.args))
     )
-    if (setup.asJava) new AvroFaker[java.util.Map[Any, Any]] {
-      override def apply(ctx: FakerContext): java.util.Map[Any, Any] = faker(ctx).asJava
-    }
+    if (setup.asJava) (ctx: FakerContext) => faker(ctx).asJava
     else faker
   }
 }
@@ -334,9 +330,7 @@ private[this] object StringFaker {
 
   def apply(setup: SetupContext, key: String): AvroFaker[_] = {
     val faker = fake(setup.args, key)
-    if (setup.asJava) new AvroFaker[Utf8] {
-      override def apply(ctx: FakerContext): Utf8 = new Utf8(faker(ctx))
-    }
+    if (setup.asJava) (ctx: FakerContext) => new Utf8(faker(ctx))
     else faker
   }
 }
