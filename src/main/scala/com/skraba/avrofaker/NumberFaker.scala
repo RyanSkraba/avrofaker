@@ -11,7 +11,7 @@ import scala.math.Numeric._
 object NumberFaker {
 
   /** Tests a numeric value and ensures that it is between the bounds (inclusive). */
-  def forceBounds[T](value: T, lower: T, upper: T)(implicit num: Numeric[T]): T = {
+  private def forceBounds[T](value: T, lower: T, upper: T)(implicit num: Numeric[T]): T = {
     import num._
     value min upper max lower
   }
@@ -54,7 +54,7 @@ object NumberFaker {
       .asInstanceOf[Option[T]]
   }
 
-  def toNum[T](value: Any)(implicit num: Numeric[T]): T = {
+  private def toNum[T](value: Any)(implicit num: Numeric[T]): T = {
     toNumOption(value)(num).getOrElse {
       sys.error(s"Unsupported numeric type: ${num.getClass} for ${value.getClass}")
     }
@@ -131,7 +131,7 @@ object NumberFaker {
     }
   }
 
-  def bounded[T](bounds: (T, T), args: Map[String, Any])(implicit num: Numeric[T]): AvroFaker[T] =
+  private def bounded[T](bounds: (T, T), args: Map[String, Any])(implicit num: Numeric[T]): AvroFaker[T] =
     BoundedFaker(
       minFn = NumberFaker(bounds, args, ArgMin)(num),
       maxFn = NumberFaker(bounds, args, ArgMax)(num),
@@ -152,7 +152,7 @@ object NumberFaker {
     RandomFaker(minFn = ConstantFaker[T](min), maxFn = ConstantFaker[T](max))
   }
 
-  def gauss[T](bounds: (T, T), args: Map[String, Any])(implicit num: Numeric[T]): AvroFaker[T] = {
+  private def gauss[T](bounds: (T, T), args: Map[String, Any])(implicit num: Numeric[T]): AvroFaker[T] = {
 
     /** Fractional numbers have a standard deviation of 100 instead of 1 so we see a wider range of values. */
     val defaultStddev: Double = num match {
@@ -168,7 +168,7 @@ object NumberFaker {
     )
   }
 
-  def sequence[T](bounds: (T, T), args: Map[String, Any])(implicit num: Numeric[T]): AvroFaker[T] = {
+  private def sequence[T](bounds: (T, T), args: Map[String, Any])(implicit num: Numeric[T]): AvroFaker[T] = {
     SequenceFaker(
       minFn = NumberFaker[T](bounds, args, ArgMin),
       maxFn = NumberFaker[T](bounds, args, ArgMax),
@@ -178,7 +178,7 @@ object NumberFaker {
     )
   }
 
-  def weights[T](bounds: (T, T), args: Map[String, Any])(implicit num: Numeric[T]): AvroFaker[T] = {
+  private def weights[T](bounds: (T, T), args: Map[String, Any])(implicit num: Numeric[T]): AvroFaker[T] = {
     import num._
     val maxFn: AvroFaker[Int] = NumberFaker((0, (num.fromInt(Int.MaxValue) min bounds._2).toInt), args, ArgMax)
     val weightFns: Seq[AvroFaker[Double]] =

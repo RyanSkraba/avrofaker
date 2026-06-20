@@ -5,13 +5,16 @@ import net.datafaker.Faker
 import org.apache.avro.Schema
 import org.apache.avro.Schema.Field
 import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed}
-import org.apache.avro.generic.{GenericRecordBuilder, IndexedRecord}
+import org.apache.avro.generic.{GenericData, GenericDatumWriter, GenericRecordBuilder, IndexedRecord}
+import org.apache.avro.io.EncoderFactory
 import org.apache.avro.util.Utf8
 
+import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
+import java.nio.charset.StandardCharsets
 import scala.jdk.CollectionConverters._
 import scala.collection.immutable.ListMap
-import scala.util.Random
+import scala.util.{Random, Using}
 
 /** A context used to set up the generator. This is used internally.
   * @param schema
@@ -160,7 +163,24 @@ object AvroFaker {
     }
   }
 
-  def apply(schema: Schema): AvroFaker[_] = apply(SetupContext(schema, Map.empty, asJava = true, new Random()))
+  def apply(schema: Schema, rnd: Random = new Random()): AvroFaker[_] = apply(
+    SetupContext(schema, Map.empty, asJava = true, rnd)
+  )
+
+  def asAvroJson(schema: Schema, rnd: Random = new Random()): AvroFaker[String] = {
+    val faker = apply(SetupContext(schema, Map.empty, asJava = true, rnd))
+    ctx => {
+      Using.resource(new ByteArrayOutputStream) { baos =>
+        val datum = faker(ctx)
+        val encoder = EncoderFactory.get.jsonEncoder(schema, baos, false)
+        val w = new GenericDatumWriter[Any](schema, GenericData.get)
+        w.write(datum, encoder)
+        encoder.flush()
+        new String(baos.toByteArray, StandardCharsets.UTF_8)
+      }
+    }
+  }
+
 }
 
 /** A faker that returns a single constant value. */
@@ -345,9 +365,7 @@ private[this] object BytesFaker {
     setup.schema.getType match {
       case Schema.Type.FIXED =>
         val faker = BytesFaker(lengthFn = ConstantFaker(setup.schema.getFixedSize))
-        if (setup.asJava) new AvroFaker[Fixed] {
-          override def apply(ctx: FakerContext): Fixed = new Fixed(setup.schema, faker(ctx).toArray)
-        }
+        if (setup.asJava) (ctx: FakerContext) => new Fixed(setup.schema, faker(ctx).toArray)
         else faker
       case _ =>
         val faker = BytesFaker(lengthFn = NumberFaker.longOrElse(setup.args, ArgLength, NumberFaker.random(16L, 33L)))
