@@ -126,6 +126,17 @@ trait WithTester extends AnyFunSpecLike with Matchers {
               }
             }
           }
+
+          {
+            // We can't do a round trip with slim JSON, so we just generate it.
+            val jsonCtx = FakerContext(new Random(RoundTripSeed))
+            val jsonGen = AvroFaker.asSlimJson(avroSchema, new Random(RoundTripSeed))
+            it(s"$description: $schema (slim json generation #${RoundTripSeed})") {
+              data.zip(LazyList.continually(jsonGen(jsonCtx)).take(count)).foreach { case (datum, slimJson) =>
+                slimJson should not be empty
+              }
+            }
+          }
         }
       }
     }

@@ -1,5 +1,17 @@
 package com.skraba.avrofaker
 
+import com.fasterxml.jackson.databind.JsonNode
+import com.fasterxml.jackson.databind.node.{
+  ArrayNode,
+  DoubleNode,
+  FloatNode,
+  IntNode,
+  JsonNodeFactory,
+  LongNode,
+  NullNode,
+  ObjectNode,
+  TextNode
+}
 import com.skraba.avrofaker.AvroFaker._
 import net.datafaker.Faker
 import org.apache.avro.Schema
@@ -167,6 +179,7 @@ object AvroFaker {
     SetupContext(schema, Map.empty, asJava = true, rnd)
   )
 
+  /** Creates a fake datum as an Avro-serialized JSON. */
   def asAvroJson(schema: Schema, rnd: Random = new Random()): AvroFaker[String] = {
     val faker = apply(SetupContext(schema, Map.empty, asJava = true, rnd))
     ctx => {
@@ -181,6 +194,29 @@ object AvroFaker {
     }
   }
 
+  /** Creates a fake datum as JSON, using slightly different rules. This can't be deserialized as JSON but doesn't
+    * insert extra types for unions.
+    */
+  def asSlimJson(schema: Schema, rnd: Random = new Random()): AvroFaker[String] = {
+    val faker = apply(SetupContext(schema, Map.empty, asJava = false, rnd))
+    def toSlimJson(in: Any): JsonNode = in match {
+      case m: Map[_, _] =>
+        new ObjectNode(
+          JsonNodeFactory.instance,
+          m.collect { case (key, value) => key.toString -> toSlimJson(value) }.asJava
+        )
+      case a: Seq[_]                       => new ArrayNode(JsonNodeFactory.instance, a.map(toSlimJson).asJava)
+      case i: Int                          => new IntNode(i)
+      case l: Long                         => new LongNode(l)
+      case f: Float                        => new FloatNode(f)
+      case d: Double                       => new DoubleNode(d)
+      case s: String                       => new TextNode(s)
+      case other if Option(other).nonEmpty => new TextNode(in.toString)
+      case other                           => NullNode.instance
+    }
+
+    ctx => toSlimJson(faker(ctx)).toString
+  }
 }
 
 /** A faker that returns a single constant value. */
