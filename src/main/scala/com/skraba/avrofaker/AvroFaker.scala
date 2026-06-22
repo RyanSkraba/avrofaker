@@ -205,6 +205,14 @@ object AvroFaker {
           JsonNodeFactory.instance,
           m.collect { case (key, value) => key.toString -> toSlimJson(value) }.asJava
         )
+      case record: IndexedRecord =>
+        new ObjectNode(
+          JsonNodeFactory.instance,
+          record.getSchema.getFields.asScala
+            .collect { case field: Field => field.name() -> toSlimJson(record.get(field.pos())) }
+            .toMap
+            .asJava
+        )
       case a: Seq[_]                       => new ArrayNode(JsonNodeFactory.instance, a.map(toSlimJson).asJava)
       case i: Int                          => new IntNode(i)
       case l: Long                         => new LongNode(l)
@@ -212,7 +220,7 @@ object AvroFaker {
       case d: Double                       => new DoubleNode(d)
       case s: String                       => new TextNode(s)
       case other if Option(other).nonEmpty => new TextNode(in.toString)
-      case other                           => NullNode.instance
+      case _                               => NullNode.instance
     }
 
     ctx => toSlimJson(faker(ctx)).toString

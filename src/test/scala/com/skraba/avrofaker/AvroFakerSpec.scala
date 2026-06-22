@@ -1,6 +1,7 @@
 package com.skraba.avrofaker
 
-import org.apache.avro.{Schema}
+import org.apache.avro.{Schema, SchemaBuilder}
+
 import scala.util.Random
 
 class AvroFakerSpec extends WithTester {
@@ -438,6 +439,44 @@ class AvroFakerSpec extends WithTester {
       Option(gen(ctx)) shouldBe None
       Option(gen(ctx)) shouldBe None
       Option(gen(ctx)) shouldBe None
+    }
+  }
+
+  describe("Generating JSON strings") {
+    val optionalInt = SchemaBuilder.record("A").fields().requiredInt("a1").optionalInt("a2").endRecord()
+    optionalInt.addProp("faker", "sequence")
+    it("should generate Avro serialized JSON") {
+      val ctx = FakerContext(new Random(0))
+      val gen = AvroFaker.asAvroJson(optionalInt, new Random(0))
+      LazyList.continually(gen(ctx)).take(10) shouldBe Seq(
+        """{"a1":0,"a2":{"int":0}}""",
+        """{"a1":1,"a2":{"int":1}}""",
+        """{"a1":2,"a2":null}""",
+        """{"a1":3,"a2":{"int":2}}""",
+        """{"a1":4,"a2":{"int":3}}""",
+        """{"a1":5,"a2":null}""",
+        """{"a1":6,"a2":{"int":4}}""",
+        """{"a1":7,"a2":null}""",
+        """{"a1":8,"a2":{"int":5}}""",
+        """{"a1":9,"a2":{"int":6}}"""
+      )
+    }
+
+    it("should generate slim serialized JSON") {
+      val ctx = FakerContext(new Random(0))
+      val gen = AvroFaker.asSlimJson(optionalInt, new Random(0))
+      LazyList.continually(gen(ctx)).take(10) shouldBe Seq(
+        """{"a1":0,"a2":0}""",
+        """{"a1":1,"a2":1}""",
+        """{"a1":2,"a2":null}""",
+        """{"a1":3,"a2":2}""",
+        """{"a1":4,"a2":3}""",
+        """{"a1":5,"a2":null}""",
+        """{"a1":6,"a2":4}""",
+        """{"a1":7,"a2":null}""",
+        """{"a1":8,"a2":5}""",
+        """{"a1":9,"a2":6}"""
+      )
     }
   }
 }
