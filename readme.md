@@ -529,7 +529,7 @@ You can import the library into your project from [maven central](https://centra
 <dependency>
   <groupId>com.skraba</groupId>
   <artifactId>avrofaker</artifactId>
-  <version>0.0.0</version>
+  <version>0.0.1</version>
 </dependency>
 ```
 
