@@ -40,7 +40,7 @@ import scala.util.{Random, Using}
   * @param rnd
   *   A random number generator that can set with a rpredefined key for reproducibility.
   */
-private case class SetupContext(schema: Schema, parentArgs: Map[String, Any], asJava: Boolean, rnd: Random) {
+case class SetupContext(schema: Schema, parentArgs: Map[String, Any], asJava: Boolean, rnd: Random) {
   lazy val args: Map[String, Any] = parentArgs ++ argsOf(schema)
 
   def argsOf(in: Any): Map[String, Any] = {
