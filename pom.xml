@@ -67,7 +67,7 @@
     <plugin.maven.scala.version>4.9.7</plugin.maven.scala.version>
     <plugin.maven.scalatest.exclude>org.scalatest.tags.Slow</plugin.maven.scalatest.exclude>
     <plugin.maven.scalatest.version>2.2.0</plugin.maven.scalatest.version>
-    <plugin.maven.spotless.version>3.1.0</plugin.maven.spotless.version>
+    <plugin.maven.spotless.version>3.8.0</plugin.maven.spotless.version>
     <plugin.report.surefire.maven.version>3.5.0</plugin.report.surefire.maven.version>
     <plugin.resources.maven.version>3.3.1</plugin.resources.maven.version>
     <plugin.shade.maven.version>3.6.1</plugin.shade.maven.version>
