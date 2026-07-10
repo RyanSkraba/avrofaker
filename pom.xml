@@ -49,7 +49,7 @@
     <scala.binary.version>2.13</scala.binary.version>
     <scala.version>2.13.18</scala.version>
     <scalafmt.version>3.8.0</scalafmt.version>
-    <scalatest.version>3.2.19</scalatest.version>
+    <scalatest.version>3.2.20</scalatest.version>
 
     <!-- Plugins -->
     <plugin.clean.maven.version>3.5.0</plugin.clean.maven.version>
