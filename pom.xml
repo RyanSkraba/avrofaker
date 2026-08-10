@@ -60,7 +60,7 @@
     <plugin.failsafe.maven.version>3.5.4</plugin.failsafe.maven.version>
     <plugin.gpg.maven.version>3.2.8</plugin.gpg.maven.version>
     <plugin.install.maven.version>3.1.4</plugin.install.maven.version>
-    <plugin.jar.maven.version>3.5.0</plugin.jar.maven.version>
+    <plugin.jar.maven.version>3.5.1</plugin.jar.maven.version>
     <plugin.javadoc.maven.version>3.12.0</plugin.javadoc.maven.version>
     <plugin.maven.docker.version>0.45.1</plugin.maven.docker.version>
     <plugin.maven.publishing.central.version>0.11.0</plugin.maven.publishing.central.version>
