@@ -57,7 +57,7 @@
     <plugin.deploy.maven.version>3.1.4</plugin.deploy.maven.version>
     <plugin.enforcer.maven.version>3.6.3</plugin.enforcer.maven.version>
     <plugin.enforcer.required.maven.version>3.8.1</plugin.enforcer.required.maven.version>
-    <plugin.failsafe.maven.version>3.5.4</plugin.failsafe.maven.version>
+    <plugin.failsafe.maven.version>3.5.6</plugin.failsafe.maven.version>
     <plugin.gpg.maven.version>3.2.8</plugin.gpg.maven.version>
     <plugin.install.maven.version>3.1.4</plugin.install.maven.version>
     <plugin.jar.maven.version>3.5.0</plugin.jar.maven.version>
