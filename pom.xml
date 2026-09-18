@@ -45,7 +45,7 @@
     <exec.mainClass/>
 
     <!-- Dependencies -->
-    <avro.version>1.12.1</avro.version>
+    <avro.version>1.12.2</avro.version>
     <scala.binary.version>2.13</scala.binary.version>
     <scala.version>2.13.18</scala.version>
     <scalafmt.version>3.8.0</scalafmt.version>
