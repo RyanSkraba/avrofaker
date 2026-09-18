@@ -53,27 +53,27 @@
 
     <!-- Plugins -->
     <plugin.clean.maven.version>3.5.0</plugin.clean.maven.version>
-    <plugin.compiler.maven.version>3.15.0</plugin.compiler.maven.version>
-    <plugin.deploy.maven.version>3.1.4</plugin.deploy.maven.version>
+    <plugin.compiler.maven.version>3.16.0</plugin.compiler.maven.version>
+    <plugin.deploy.maven.version>3.2.0</plugin.deploy.maven.version>
     <plugin.enforcer.maven.version>3.6.3</plugin.enforcer.maven.version>
     <plugin.enforcer.required.maven.version>3.8.1</plugin.enforcer.required.maven.version>
-    <plugin.failsafe.maven.version>3.5.4</plugin.failsafe.maven.version>
+    <plugin.failsafe.maven.version>3.6.0</plugin.failsafe.maven.version>
     <plugin.gpg.maven.version>3.2.8</plugin.gpg.maven.version>
-    <plugin.install.maven.version>3.1.4</plugin.install.maven.version>
-    <plugin.jar.maven.version>3.5.0</plugin.jar.maven.version>
+    <plugin.install.maven.version>3.2.0</plugin.install.maven.version>
+    <plugin.jar.maven.version>3.5.1</plugin.jar.maven.version>
     <plugin.javadoc.maven.version>3.12.0</plugin.javadoc.maven.version>
     <plugin.maven.docker.version>0.45.1</plugin.maven.docker.version>
-    <plugin.maven.publishing.central.version>0.11.0</plugin.maven.publishing.central.version>
-    <plugin.maven.scala.version>4.9.7</plugin.maven.scala.version>
+    <plugin.maven.publishing.central.version>0.9.0</plugin.maven.publishing.central.version>
+    <plugin.maven.scala.version>4.9.10</plugin.maven.scala.version>
     <plugin.maven.scalatest.exclude>org.scalatest.tags.Slow</plugin.maven.scalatest.exclude>
     <plugin.maven.scalatest.version>2.2.0</plugin.maven.scalatest.version>
-    <plugin.maven.spotless.version>3.8.0</plugin.maven.spotless.version>
+    <plugin.maven.spotless.version>3.10.2</plugin.maven.spotless.version>
     <plugin.report.surefire.maven.version>3.5.0</plugin.report.surefire.maven.version>
     <plugin.resources.maven.version>3.5.0</plugin.resources.maven.version>
     <plugin.shade.maven.version>3.6.2</plugin.shade.maven.version>
     <plugin.site.maven.version>4.0.0-M16</plugin.site.maven.version>
     <plugin.source.maven.version>3.4.0</plugin.source.maven.version>
-    <plugin.surefire.maven.version>3.5.6</plugin.surefire.maven.version>
+    <plugin.surefire.maven.version>3.6.0</plugin.surefire.maven.version>
     <plugin.war.maven.version>3.4.0</plugin.war.maven.version>
   </properties>
 
